@@ -14,6 +14,9 @@ TOKEN_LENGTH=800
 # 环境变量用于在Debian或Ubuntu操作系统中设置非交互式（noninteractive）安装模式
 export DEBIAN_FRONTEND=noninteractive
 
+# Github 反代加速代理
+GH_PROXY='https://ghproxy.agrayman.gay/'
+
 trap "rm -f /tmp/warp-go*; exit 1" INT
 
 E[0]="Language:\n  1.English (default) \n  2.简体中文"
@@ -244,11 +247,17 @@ reading() { read -rp "$(info "$1")" "$2"; }
 text() { eval echo "\${${L}[$*]}"; }
 text_eval() { eval echo "\$(eval echo "\${${L}[$*]}")"; }
 
-# 自定义谷歌翻译函数
+# 自定义谷歌翻译函数，使用两个翻译 api，如均不能翻译，则返回原英文
 translate() {
-  [ -n "$@" ] && EN="$@"
-  ZH=$(curl -km8 -sSL "https://translate.google.com/translate_a/t?client=any_client_id_works&sl=en&tl=zh&q=${EN//[[:space:]]/%20}" 2>/dev/null)
-  [[ "$ZH" =~ ^\[\".+\"\]$ ]] && cut -d \" -f2 <<< "$ZH"
+  [ -n "$@" ] && local EN="$@"
+  [ -z "$ZH" ] && local ZH=$(curl -km8 -sSL "https://translate.google.com/translate_a/t?client=any_client_id_works&sl=en&tl=zh&q=${EN//[[:space:]]/%20}" 2>/dev/null | awk -F '"' '{print $2}')
+  [ -z "$ZH" ] && local ZH=$(curl -km8 -sSL "https://findmyip.net/api/translate.php?text=${EN//[[:space:]]/%20}" 2>/dev/null | awk -F '"' '{print $16}')
+  [ -z "$ZH" ] && echo "$EN" || echo "$ZH"
+}
+
+# 检测是否需要启用 Github CDN，如能直接连通，则不使用
+check_cdn() {
+  [ -n "$GH_PROXY" ] && wget --server-response --quiet --output-document=/dev/null --no-check-certificate --tries=2 --timeout=3 https://raw.githubusercontent.com/fscarmen/warp-sh/main/README.md >/dev/null 2>&1 && unset GH_PROXY
 }
 
 # 脚本当天及累计运行次数统计
@@ -263,17 +272,12 @@ select_language() {
   UTF8_LOCALE=$(locale -a 2>/dev/null | grep -iEm1 "UTF-8|utf8")
   [ -n "$UTF8_LOCALE" ] && export LC_ALL="$UTF8_LOCALE" LANG="$UTF8_LOCALE" LANGUAGE="$UTF8_LOCALE"
 
-  case "$(cat /opt/warp-go/language 2>&1)" in
-    E )
-      L=E
-      ;;
-    C )
-      L=C
-      ;;
-    * )
-      L=E && [[ -z "$OPTION" || "$OPTION" = [ahvi46d] ]] && hint "\n $(text 0) \n" && reading " $(text 4) " LANGUAGE
-      [ "$LANGUAGE" = 2 ] && L=C
-  esac
+  if [ -s /opt/warp-go/language ]; then
+    L=$(cat /opt/warp-go/language)
+  else
+    L=E && [[ -z "$OPTION" || "$OPTION" = [ahvi46d] ]] && hint " $(text 0) " && reading " $(text 4) " LANGUAGE
+    [ "$LANGUAGE" = 2 ] && L=C
+  fi
 }
 
 # 必须以root运行脚本
@@ -542,12 +546,12 @@ change_ip() {
   UA_Browser="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.87 Safari/537.36"
 
   # 根据 lmc999 脚本检测 Netflix Title，如获取不到，使用兜底默认值
-  local LMC999=($(curl -sSLm4 https://raw.githubusercontent.com/lmc999/RegionRestrictionCheck/main/check.sh | awk -F 'title/' '/netflix.com\/title/{print $2}' | cut -d\" -f1))
+  local LMC999=($(curl -sSLm4 ${GH_PROXY}https://raw.githubusercontent.com/lmc999/RegionRestrictionCheck/main/check.sh | sed -n 's#.*/title/\([0-9]\+\).*#\1#gp'))
   RESULT_TITLE=(${LMC999[*]:0:2})
   REGION_TITLE=${LMC999[2]}
   [[ ! "${RESULT_TITLE[0]}" =~ ^[0-9]+$ ]] && RESULT_TITLE[0]='81280792'
   [[ ! "${RESULT_TITLE[1]}" =~ ^[0-9]+$ ]] && RESULT_TITLE[1]='70143836'
-  [[ ! "$REGION_TITLE" =~ ^[0-9]+$ ]] && REGION_TITLE='80018499'
+  [[ ! "$REGION_TITLE" =~ ^[0-9]+$ ]] && REGION_TITLE=${RESULT_TITLE[1]}
 
   # 检测 WARP 单双栈服务
   unset T4 T6
@@ -1463,6 +1467,7 @@ fi
 NAME="$3"
 
 # 主程序运行 1/3
+check_cdn
 statistics_of_run-times
 select_language
 check_operating_system
