@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # 当前脚本版本号
-VERSION='3.0.6'
+VERSION='3.0.7'
 
 # IP API 服务商
 IP_API=("http://ip-api.com/json/" "https://api.ip.sb/geoip" "https://ifconfig.co/json" "https://www.cloudflare.com/cdn-cgi/trace")
@@ -16,8 +16,8 @@ GH_PROXY='https://ghproxy.agrayman.gay/'
 
 E[0]="\n Language:\n 1. English (default) \n 2. 简体中文\n"
 C[0]="${E[0]}"
-E[1]="Support Alpine edge system."
-C[1]="支持 Alpine edge 系统"
+E[1]="Support CentOS 9 / Alma Linux 9 / Rocky Linux 9 system."
+C[1]="支持 CentOS 9 / Alma Linux 9 / Rocky Linux 9 系统"
 E[2]="The script must be run as root, you can enter sudo -i and then download and run again. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
 C[2]="必须以root方式运行脚本，可以输入 sudo -i 后重新下载运行，问题反馈:[https://github.com/fscarmen/warp-sh/issues]"
 E[3]="The TUN module is not loaded. You should turn it on in the control panel. Ask the supplier for more help. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
@@ -66,8 +66,8 @@ E[24]="Client is on"
 C[24]="Client 已开启"
 E[25]="Device name"
 C[25]="设备名"
-E[26]="Curren operating system is \$SYS.\\\n Centos 9 and the system lower than \$SYSTEM \${MAJOR[int]} is not supported. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
-C[26]="当前操作是 \$SYS\\\n 不支持 CentOS 9 及 \$SYSTEM \${MAJOR[int]} 以下系统,问题反馈:[https://github.com/fscarmen/warp-sh/issues]"
+E[26]="Curren operating system is \$SYS.\\\n The system lower than \$SYSTEM \${MAJOR[int]} is not supported. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
+C[26]="当前操作是 \$SYS\\\n 不支持 \$SYSTEM \${MAJOR[int]} 以下系统,问题反馈:[https://github.com/fscarmen/warp-sh/issues]"
 E[27]="Local Socks5"
 C[27]="本地 Socks5"
 E[28]="If there is a WARP+ License, please enter it, otherwise press Enter to continue:"
@@ -449,7 +449,7 @@ check_virt() {
     VIRT=$(virt-what | tr '\n' ' ')
   else
     [ "$(type -p systemd-detect-virt)" ] && VIRT=$(systemd-detect-virt)
-    [[ -z "$VIRT" && "$(type -p hostnamectl)" ]] && VIRT=$(hostnamectl | awk '/Virtualization:/{print $NF}')
+    [[ -z "$VIRT" && -x "$(type -p hostnamectl)" ]] && VIRT=$(hostnamectl | awk '/Virtualization:/{print $NF}')
   fi
 }
 
@@ -458,9 +458,9 @@ check_virt() {
 check_operating_system() {
   if [ -s /etc/os-release ]; then
     SYS="$(grep -i pretty_name /etc/os-release | cut -d \" -f2)"
-  elif [ $(type -p hostnamectl) ]; then
+  elif [ -x "$(type -p hostnamectl)" ]; then
     SYS="$(hostnamectl | grep -i system | cut -d : -f2)"
-  elif [ $(type -p lsb_release) ]; then
+  elif [ -x "$(type -p lsb_release)" ]; then
     SYS="$(lsb_release -sd)"
   elif [ -s /etc/lsb-release ]; then
     SYS="$(grep -i description /etc/lsb-release | cut -d \" -f2)"
@@ -491,12 +491,15 @@ check_operating_system() {
 
   # 针对各厂运的订制系统
   if [ -z "$SYSTEM" ]; then
-    [ $(type -p yum) ] && int=2 && SYSTEM='CentOS' || error " $(text 5) "
+    [ -x "$(type -p yum)" ] && int=2 && SYSTEM='CentOS' || error " $(text 5) "
   fi
+
+  # 判断主 Linux 版本
+  MAJOR_VERSION=$(sed "s/[^0-9.]//g" <<< "$SYS" | cut -d. -f1)
 
   # 先排除 EXCLUDE 里包括的特定系统，其他系统需要作大发行版本的比较
   for ex in "${EXCLUDE[@]}"; do [[ ! "${SYS,,}" =~ $ex ]]; done &&
-  [[ "$(echo "$SYS" | sed "s/[^0-9.]//g" | cut -d. -f1)" -lt "${MAJOR[int]}" || ( "$SYSTEM" = 'CentOS' && "$(echo "$SYS" | sed "s/[^0-9.]//g" | cut -d. -f1)" -ge '9') ]] && error " $(text 26) "
+  [ "$MAJOR_VERSION" -lt "${MAJOR[int]}" ] && error " $(text 26) "
 }
 
 # 安装系统依赖及定义 ping 指令
@@ -515,7 +518,7 @@ check_dependencies() {
   fi
 
   for g in "${!DEPS_CHECK[@]}"; do
-    [ ! $(type -p ${DEPS_CHECK[g]}) ] && [[ ! "${DEPS[@]}" =~ "${DEPS_INSTALL[g]}" ]] && DEPS+=(${DEPS_INSTALL[g]})
+    [ ! -x "$(type -p ${DEPS_CHECK[g]})" ] && [[ ! "${DEPS[@]}" =~ "${DEPS_INSTALL[g]}" ]] && DEPS+=(${DEPS_INSTALL[g]})
   done
 
   if [ "${#DEPS[@]}" -ge 1 ]; then
@@ -526,7 +529,7 @@ check_dependencies() {
     info "\n $(text 8) \n"
   fi
 
-  PING6='ping -6' && [ $(type -p ping6) ] && PING6='ping6'
+  PING6='ping -6' && [ -x "$(type -p ping6)" ] && PING6='ping6'
 }
 
 # 只保留Teams账户，删除其他账户
@@ -741,8 +744,8 @@ plus() {
   case "$CHOOSEPLUS" in
     1 )
       input
-      [ $(type -p git) ] || ${PACKAGE_INSTALL[int]} git 2>/dev/null
-      [ $(type -p python3) ] || ${PACKAGE_INSTALL[int]} python3 2>/dev/null
+      [ -x "$(type -p git)" ] || ${PACKAGE_INSTALL[int]} git 2>/dev/null
+      [ -x "$(type -p python3)" ] || ${PACKAGE_INSTALL[int]} python3 2>/dev/null
       [ -d ~/warp-plus-cloudflare ] || ${GH_PROXY}git clone https://github.com/aliilapro/warp-plus-cloudflare.git
       echo "$ID" | python3 ~/warp-plus-cloudflare/wp-plus.py
       ;;
@@ -1033,7 +1036,7 @@ change_ip() {
   CHANGE_IP3=("" "" "" "" "" "" "" "change_wireproxy")
 
   for a in ${!INSTALL_CHECK[@]}; do
-    [ $(type -p ${INSTALL_CHECK[a]}) ] && INSTALL_RESULT[a]=1 || INSTALL_RESULT[a]=0
+    [ -x "$(type -p ${INSTALL_CHECK[a]})" ] && INSTALL_RESULT[a]=1 || INSTALL_RESULT[a]=0
   done
 
   for b in ${!CASE_RESAULT[@]}; do
@@ -1087,7 +1090,7 @@ uninstall() {
   uninstall_warp() {
     wg-quick down warp >/dev/null 2>&1
     systemctl disable --now wg-quick@warp >/dev/null 2>&1; sleep 3
-    [ $(type -p rpm) ] && rpm -e wireguard-tools 2>/dev/null
+    [ -x "$(type -p rpm)" ] && rpm -e wireguard-tools 2>/dev/null
     systemctl restart systemd-resolved >/dev/null 2>&1; sleep 3
     cancel_account /etc/wireguard/warp-account.conf
     rm -rf /usr/bin/wireguard-go /usr/bin/warp /etc/dnsmasq.d/warp.conf /usr/bin/wireproxy /etc/local.d/warp.start
@@ -1129,7 +1132,7 @@ uninstall() {
   UNINSTALL_DNSMASQ=("ipset dnsmasq resolvconf ")
   UNINSTALL_RESULT=("$(text 117)" "$(text 119)" "$(text 98)")
   for i in ${!UNINSTALL_CHECK[@]}; do
-    [ $(type -p ${UNINSTALL_CHECK[i]}) ] && UNINSTALL_DO_LIST[i]=1 && UNINSTALL_DEPENDENCIES_LIST+=${UNINSTALL_DEPENDENCIES[i]}
+    [ -x "$(type -p ${UNINSTALL_CHECK[i]})" ] && UNINSTALL_DO_LIST[i]=1 && UNINSTALL_DEPENDENCIES_LIST+=${UNINSTALL_DEPENDENCIES[i]}
     [[ $SYSTEM != "Arch" && $(dkms status 2>/dev/null) =~ wireguard ]] && UNINSTALL_DEPENDENCIES_LIST+=${UNINSTALL_NOT_ARCH[i]}
     [ -e /etc/dnsmasq.d/warp.conf ] && UNINSTALL_DEPENDENCIES_LIST+=${UNINSTALL_DNSMASQ[i]}
   done
@@ -1176,7 +1179,7 @@ ver() {
 net() {
   local NO_OUTPUT="$1"
   unset IP4 IP6 WAN4 WAN6 COUNTRY4 COUNTRY6 ASNORG4 ASNORG6 WARPSTATUS4 WARPSTATUS6 TYPE QUOTA
-  [ ! $(type -p wg-quick) ] && error " $(text 10) "
+  [ ! -x "$(type -p wg-quick)" ] && error " $(text 10) "
   [ ! -e /etc/wireguard/warp.conf ] && error " $(text 190) "
   local i=1; local j=5
   hint " $(text 11)\n $(text 12) "
@@ -1185,7 +1188,7 @@ net() {
   wg-quick up warp >/dev/null 2>&1
   ss -nltp | grep dnsmasq >/dev/null 2>&1 && systemctl restart dnsmasq >/dev/null 2>&1
 
-  PING6='ping -6' && [ $(type -p ping6) ] && PING6='ping6'
+  PING6='ping -6' && [ -x "$(type -p ping6)" ] && PING6='ping6'
   LAN4=$(ip route get 192.168.193.10 2>/dev/null | awk '{for (i=0; i<NF; i++) if ($i=="src") {print $(i+1)}}')
   LAN6=$(ip route get 2606:4700:d0::a29f:c001 2>/dev/null | awk '{for (i=0; i<NF; i++) if ($i=="src") {print $(i+1)}}')
   if [[ $(ip link show | awk -F': ' '{print $2}') =~ warp ]]; then
@@ -1234,6 +1237,7 @@ net() {
         wg-quick down warp >/dev/null 2>&1
         ERROR_MESSAGE=$(wg-quick up warp 2>&1)
         wg-quick down warp >/dev/null 2>&1
+        [ -s /etc/resolv.conf.origin ] && cp -f /etc/resolv.conf.origin /etc/resolv.conf
         echo -e " ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓\n $(text 20): $SYS\n\n $(text 21):$(uname -r) \n\n $(text 40): ${MENU_OPTION[MENU_CHOOSE]} \n\n $ERROR_MESSAGE\n ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑ "
         error " $(text 13) "
       else
@@ -1251,13 +1255,13 @@ net() {
 
 # WARP 开关，先检查是否已安装，再根据当前状态转向相反状态
 onoff() {
-  [ ! $(type -p wg-quick) ] && error " $(text 155) "
+  [ ! -x "$(type -p wg-quick)" ] && error " $(text 155) "
   [ -n "$(wg 2>/dev/null)" ] && (wg-quick down warp >/dev/null 2>&1; info " $(text 15) ") || net
 }
 
 # Client 开关，先检查是否已安装，再根据当前状态转向相反状态
 client_onoff() {
-  [ ! $(type -p warp-cli) ] && error " $(text 93) "
+  [ ! -x "$(type -p warp-cli)" ] && error " $(text 93) "
   if [ "$(systemctl is-active warp-svc)" = 'active' ]; then
     local CLIENT_MODE=$(warp-cli --accept-tos settings | awk '/Mode:/{for (i=0; i<NF; i++) if ($i=="Mode:") {print $(i+1)}}')
     [ "$CLIENT_MODE" = 'Warp' ] && rule_del >/dev/null 2>&1
@@ -1290,7 +1294,7 @@ client_onoff() {
 wireproxy_onoff() {
   local NO_OUTPUT="$1"
   unset QUOTA
-  [ ! $(type -p wireproxy) ] && error " $(text 157) " || PUFFERFFISH=1
+  [ ! -x "$(type -p wireproxy)" ] && error " $(text 157) " || PUFFERFFISH=1
   if ss -nltp | awk '{print $NF}' | awk -F \" '{print $2}' | grep -q wireproxy; then
     systemctl stop wireproxy
     [[ ! $(ss -nltp | awk '{print $NF}' | awk -F \" '{print $2}') =~ wireproxy ]] && info " $(text 158) "
@@ -1361,6 +1365,19 @@ check_stack() {
     CONF3=("01D" "10D" "11D" "11ND")
   elif [ "$m" = 8 ]; then
     error "\n $(text 189) \n"
+  fi
+}
+
+# 对于 CentOS 9 / AlmaLinux 9 / RockyLinux 9 及类似的系统，由于 wg-quick 不能对 openresolv 进行操作，所以直接处理 /etc/resolv.conf 文件
+centos9_resolv() {
+  local EXECUTE=$1
+  local STACK=$2
+  if [ "$EXECUTE" = 'backup' ]; then
+    cp -f /etc/resolv.conf{,.origin}
+  elif [ "$EXECUTE" = 'generate' ]; then
+    [ "$STACK" = '0' ] && echo -e "# Generated by WARP script\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844\nnameserver 2606:4700:4700::1111\nnameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1" > /etc/resolv.conf || echo -e "# Generated by WARP script\nnameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844\nnameserver 2606:4700:4700::1111" > /etc/resolv.conf
+  elif [ "$EXECUTE" = 'restore' ]; then
+    [ -s /etc/resolv.conf.origin ] && mv -f /etc/resolv.conf.origin /etc/resolv.conf
   fi
 }
 
@@ -1439,7 +1456,7 @@ check_system_info() {
 
   # 判断是否有加载 wireguard 内核，如没有先尝试是否可以加载，再重新判断一次
   if [ ! -e /sys/module/wireguard ]; then
-    [ -s /lib/modules/$(uname -r)/kernel/drivers/net/wireguard/wireguard.ko* ] && [ $(type -p lsmod) ] && ! lsmod | grep -q wireguard && [ $(type -p modprobe) ] && modprobe wireguard
+    [ -s /lib/modules/$(uname -r)/kernel/drivers/net/wireguard/wireguard.ko* ] && [ -x "$(type -p lsmod)" ] && ! lsmod | grep -q wireguard && [ -x "$(type -p modprobe)" ] && modprobe wireguard
     [ -e /sys/module/wireguard ] && KERNEL_ENABLE=1 || KERNEL_ENABLE=0
   else
     KERNEL_ENABLE=1
@@ -1512,7 +1529,7 @@ EOF
 
   # 判断当前 Linux Client 状态，决定变量 CLIENT，变量 CLIENT 含义:0=未安装  1=已安装未激活  2=状态激活  3=Client proxy 已开启  5=Client warp 已开启
   CLIENT=0
-  if [ $(type -p warp-cli) ]; then
+  if [ -x "$(type -p warp-cli)" ]; then
     CLIENT=1 && CLIENT_INSTALLED="$(text 92)"
     [ "$(systemctl is-enabled warp-svc)" = enabled ] && CLIENT=2
     if [[ "$CLIENT" = 2 && "$(systemctl is-active warp-svc)" = 'active' ]]; then
@@ -1531,7 +1548,7 @@ EOF
 
   # 判断当前 WireProxy 状态，决定变量 WIREPROXY，变量 WIREPROXY 含义:0=未安装，1=已安装,断开状态，2=Client 已开启
   WIREPROXY=0
-  if [ $(type -p wireproxy) ]; then
+  if [ -x "$(type -p wireproxy)" ]; then
     WIREPROXY=1
     [ "$WIREPROXY" = 1 ] && WIREPROXY_INSTALLED="$(text 92)" && [[ "$(ss -nltp | awk '{print $NF}' | awk -F \" '{print $2}')" =~ wireproxy ]] && WIREPROXY=2 && ip_case d wireproxy
   fi
@@ -1964,7 +1981,7 @@ install() {
       wireproxy_latest=${wireproxy_latest:-'1.0.9'}
       wget --no-check-certificate -T10 -t1 $STACK -O wireproxy.tar.gz ${GH_PROXY}https://github.com/pufferffish/wireproxy/releases/download/v"$wireproxy_latest"/wireproxy_linux_"$ARCHITECTURE".tar.gz ||
       wget --no-check-certificate $STACK -O wireproxy.tar.gz https://gitlab.com/fscarmen/warp/-/raw/main/wireproxy/wireproxy_linux_"$ARCHITECTURE".tar.gz
-      [ $(type -p tar) ] || ${PACKAGE_INSTALL[int]} tar 2>/dev/null || ( ${PACKAGE_UPDATE[int]}; ${PACKAGE_INSTALL[int]} tar 2>/dev/null )
+      [ -x "$(type -p tar)" ] || ${PACKAGE_INSTALL[int]} tar 2>/dev/null || ( ${PACKAGE_UPDATE[int]}; ${PACKAGE_INSTALL[int]} tar 2>/dev/null )
       tar xzf wireproxy.tar.gz -C /usr/bin/; rm -f wireproxy.tar.gz
     fi
 
@@ -2097,10 +2114,10 @@ EOF
       ${PACKAGE_UPDATE[int]}
 
       # s390x wireguard-tools 安装
-      [ "$ARCHITECTURE" = s390x ] && [ ! $(type -p wg) ] && rpm -i https://mirrors.cloud.tencent.com/epel/8/Everything/s390x/Packages/w/wireguard-tools-1.0.20210914-1.el8.s390x.rpm
+      [ "$ARCHITECTURE" = s390x ] && [ ! -x "$(type -p wg)" ] && rpm -i https://mirrors.cloud.tencent.com/epel/8/Everything/s390x/Packages/w/wireguard-tools-1.0.20210914-1.el8.s390x.rpm
 
       # CentOS Stream 9 需要安装 resolvconf
-      [[ "$SYSTEM" = CentOS && "$(expr "$SYS" : '.*\s\([0-9]\{1,\}\)\.*')" = 9 ]] && [ ! $(type -p resolvconf) ] &&
+      [[ "$SYSTEM" = CentOS && "$(expr "$SYS" : '.*\s\([0-9]\{1,\}\)\.*')" = 9 ]] && [ ! -x "$(type -p resolvconf)" ] &&
       wget $STACK -P /usr/sbin ${GH_PROXY}https://github.com/fscarmen/warp/releases/download/resolvconf/resolvconf && chmod +x /usr/sbin/resolvconf
       ;;
 
@@ -2159,6 +2176,13 @@ EOF
   MODIFY11ND="s/\(DNS[ ]\+=[ ]\+\).*/\18.8.8.8,8.8.4.4,1.1.1.1,2001:4860:4860::8888,2001:4860:4860::8844,2606:4700:4700::1111/g;7 s/^/PostUp = ip -4 rule add from $LAN4 lookup main\nPostDown = ip -4 rule delete from $LAN4 lookup main\nPostUp = ip -6 rule add from $LAN6 lookup main\nPostDown = ip -6 rule delete from $LAN6 lookup main\n\n/;\$a\PersistentKeepalive = 30"
 
   sed -i "$(eval echo "\$MODIFY$CONF")" /etc/wireguard/warp.conf
+
+  # 对于 CentOS 9 / AlmaLinux 9 / RockyLinux 9 及类似系统的处理
+  if [ "${SYSTEM}_${MAJOR_VERSION}" = 'CentOS_9' ]; then
+    centos9_resolv backup
+    centos9_resolv generate $m
+    sed -i 's/^\(DNS[[:space:]]=.*\)/#\1/' /etc/wireguard/warp.conf
+  fi
 
   if [ "$PUFFERFFISH" = 1 ]; then
     # 默认 Endpoint 和 DNS 默认 IPv4 和 双栈的，如是 IPv6 修改默认值
@@ -2513,9 +2537,9 @@ check_quota() {
 
 # 更换账户时，原有账户信息的备份、还原和删除
 backup_restore_delete() {
-  local backup_restore_delete="$1"
+  local EXECUTE="$1"
   local WARP_ACCOUNT_TYPE="$2"
-  if [ "$backup_restore_delete" = backup ]; then
+  if [ "$EXECUTE" = backup ]; then
     case "$WARP_ACCOUNT_TYPE" in
       warp )
         [ -e /etc/wireguard/warp.conf ] && cp -f /etc/wireguard/warp.conf{,.bak}
@@ -2533,7 +2557,7 @@ backup_restore_delete() {
       client )
         [ -e /etc/wireguard/license ] && mv -f /etc/wireguard/license{,.bak}
     esac
-  elif [ "$backup_restore_delete" = restore ]; then
+  elif [ "$EXECUTE" = restore ]; then
     case "$WARP_ACCOUNT_TYPE" in
       warp )
         [ -e /etc/wireguard/info.log ] && rm -f /etc/wireguard/info.log
@@ -2553,7 +2577,7 @@ backup_restore_delete() {
       client )
         [ -e /etc/wireguard/license.bak ] && mv -f /etc/wireguard/license.bak /etc/wireguard/license
     esac
-  elif [ "$backup_restore_delete" = delete ]; then
+  elif [ "$EXECUTE" = delete ]; then
     rm -f /etc/wireguard/*.bak
   fi
 }
@@ -2946,7 +2970,7 @@ update() {
   ACCOUNT3=("" ""  "" "" "" "" "" "wireproxy_account")
 
   for c in ${!INSTALL_CHECK[@]}; do
-    [ $(type -p ${INSTALL_CHECK[c]}) ] && INSTALL_RESULT[c]=1 || INSTALL_RESULT[c]=0
+    [ -x "$(type -p ${INSTALL_CHECK[c]})" ] && INSTALL_RESULT[c]=1 || INSTALL_RESULT[c]=0
   done
 
   for d in ${!CASE_RESAULT[@]}; do
