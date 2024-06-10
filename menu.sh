@@ -12,7 +12,7 @@ IP=("query" "ip" "ip")
 export DEBIAN_FRONTEND=noninteractive
 
 # Github 反代加速代理
-GH_PROXY='https://ghproxy.agrayman.gay/'
+GH_PROXY='https://ghproxy.lvedong.eu.org/'
 
 E[0]="\n Language:\n 1. English (default) \n 2. 简体中文\n"
 C[0]="${E[0]}"
@@ -372,7 +372,7 @@ E[177]="1. Continue using the free account without changing.\n 2. Change to WARP
 C[177]="1. 继续使用 free 账户，不变更\n 2. 变更为 WARP+ 账户"
 E[178]="1. Change to free account.\n 2. Change to another WARP+ account."
 C[178]="1. 变更为 free 账户\n 2. 变更为另一个 WARP+ 账户"
-E[179]="Can only be run using \$KERNEL_OR_WIREGUARD_GO ."
+E[179]="Can only be run using \$KERNEL_OR_WIREGUARD_GO."
 C[179]="只能使用 \$KERNEL_OR_WIREGUARD_GO 运行"
 E[180]="Install using:\n 1. wireguard kernel (default)\n 2. wireguard-go with reserved"
 C[180]="请选择 wireguard 方式:\n 1. wireguard 内核 (默认)\n 2. wireguard-go with reserved"
@@ -499,7 +499,7 @@ check_operating_system() {
 
   # 先排除 EXCLUDE 里包括的特定系统，其他系统需要作大发行版本的比较
   for ex in "${EXCLUDE[@]}"; do [[ ! "${SYS,,}" =~ $ex ]]; done &&
-  [ "$MAJOR_VERSION" -lt "${MAJOR[int]}" ] && error " $(text 26) "
+  [[ "$MAJOR_VERSION" -lt "${MAJOR[int]}" ]] && error " $(text 26) "
 }
 
 # 安装系统依赖及定义 ping 指令
