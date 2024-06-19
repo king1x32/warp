@@ -4,9 +4,9 @@
 VERSION='3.0.7'
 
 # IP API 服务商
-IP_API=("http://ip-api.com/json/" "https://api.ip.sb/geoip" "https://ifconfig.co/json" "https://www.cloudflare.com/cdn-cgi/trace")
-ISP=("isp" "isp" "asn_org")
-IP=("query" "ip" "ip")
+IP_API=("https://api-ipv4.ip.sb/geoip" "https://api-ipv6.ip.sb/geoip" "https://ifconfig.co/json" "https://www.cloudflare.com/cdn-cgi/trace" "http://ip-api.com/json/")
+ISP=("isp" "isp" "isp" "asn_org")
+IP=("ip" "ip" "ip" "query")
 
 # 环境变量用于在Debian或Ubuntu操作系统中设置非交互式（noninteractive）安装模式
 export DEBIAN_FRONTEND=noninteractive
@@ -394,8 +394,10 @@ E[188]="All endpoints of WARP cannot be connected. Ask the supplier for more hel
 C[188]="WARP 的所有的 endpoint 均不能连通，有可能 UDP 被限制了，可联系供应商了解如何开启，问题反馈:[https://github.com/fscarmen/warp-sh/issues]"
 E[189]="Cannot detect any IPv4 or IPv6. The script is aborted. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
 C[189]="检测不到任何 IPv4 或 IPv6。脚本中止，问题反馈:[https://github.com/fscarmen/warp-sh/issues]"
-E[190]="The configuration file warp.conf cannot be found, The script is aborted. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
+E[190]="The configuration file warp.conf cannot be found. The script is aborted. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
 C[190]="找不到配置文件 warp.conf，脚本中止，问题反馈:[https://github.com/fscarmen/warp-sh/issues]"
+E[191]="Current operating system is: \$SYSTEM, Linux Client only supports Ubuntu, Debian and CentOS. The script is aborted. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
+C[191]="当前操作系统是: \$SYSTEM。 Linux Client 只支持 Ubuntu, Debian 和 CentOS，脚本中止，问题反馈:[https://github.com/fscarmen/warp-sh/issues]"
 
 # 自定义字体彩色，read 函数
 warning() { echo -e "\033[31m\033[01m$*\033[0m"; }  # 红色
@@ -544,7 +546,7 @@ cancel_account(){
 ip_info() {
   local CHECK_46="$1"
   if [[ "$2" =~ ^[0-9]+$ ]]; then
-    local INTERFACE_SOCK5="-x socks5://127.0.0.1:$2"
+    local INTERFACE_SOCK5="-x socks5h://127.0.0.1:$2"
   elif [[ "$2" =~ ^[[:alnum:]]+$ ]]; then
     local INTERFACE_SOCK5="--interface $2"
   fi
@@ -557,9 +559,9 @@ ip_info() {
       CHOOSE_IP_API=${IP_API[0]} && CHOOSE_IP_ISP=${ISP[0]} && CHOOSE_IP_KEY=${IP[0]}
   esac
 
-  IP_TRACE=$(curl --retry 2 -ks${CHECK_46}m5 $INTERFACE_SOCK5 ${IP_API[3]} | grep warp | sed "s/warp=//g")
+  IP_TRACE=$(curl --retry 2 -ksm5 $INTERFACE_SOCK5 ${IP_API[3]} | grep warp | sed "s/warp=//g")
   if [ -n "$IP_TRACE" ]; then
-    IP_JSON=$(curl --retry 2 -ks${CHECK_46}m5 $INTERFACE_SOCK5 -A Mozilla $CHOOSE_IP_API)
+    IP_JSON=$(curl --retry 2 -ksm5 $INTERFACE_SOCK5 -A Mozilla $CHOOSE_IP_API)
     [[ -z "$IP_JSON" || "$IP_JSON" =~ 'error code' ]] && CHOOSE_IP_API=${IP_API[2]} && CHOOSE_IP_ISP=${ISP[2]} && CHOOSE_IP_KEY=${IP[2]} && IP_JSON=$(curl --retry 3 -ks${CHECK_46}m5 $INTERFACE_SOCK5 -A Mozilla $CHOOSE_IP_API)
 
     if [[ -n "$IP_JSON" && ! "$IP_JSON" =~ 'error code' ]]; then
@@ -950,11 +952,11 @@ change_ip() {
         WAN=$(eval echo "\$CLIENT_WAN$NF") && ASNORG=$(eval echo "\$CLIENT_ASNORG$NF") && COUNTRY=$(eval echo "\$CLIENT_COUNTRY$NF")
         unset RESULT REGION
         for l in ${!RESULT_TITLE[@]}; do
-          RESULT[l]=$(curl --user-agent "${UA_Browser}" -"$NF" -sx socks5://127.0.0.1:$CLIENT_PORT -fsL --write-out %{http_code} --output /dev/null --max-time 10 "https://www.netflix.com/title/${RESULT_TITLE[l]}")
+          RESULT[l]=$(curl --user-agent "${UA_Browser}" -"$NF" -sx socks5h://127.0.0.1:$CLIENT_PORT -fsL --write-out %{http_code} --output /dev/null --max-time 10 "https://www.netflix.com/title/${RESULT_TITLE[l]}")
           [ "${RESULT[l]}" = 200 ] && break
         done
         if [[ "${RESULT[@]}" =~ 200 ]]; then
-          REGION=$(curl --user-agent "${UA_Browser}" -"$NF" -sx socks5://127.0.0.1:$CLIENT_PORT -fs --max-time 10 --write-out "%{redirect_url}" --output /dev/null "https://www.netflix.com/title/$REGION_TITLE" | sed 's/.*com\/\([^-/]\{1,\}\).*/\1/g')
+          REGION=$(curl --user-agent "${UA_Browser}" -"$NF" -sx socks5h://127.0.0.1:$CLIENT_PORT -fs --max-time 10 --write-out "%{redirect_url}" --output /dev/null "https://www.netflix.com/title/$REGION_TITLE" | sed 's/.*com\/\([^-/]\{1,\}\).*/\1/g')
           REGION=${REGION:-'US'}
           grep -qi "$EXPECT" <<< "$REGION" && info " $(text 125) " && i=0 && sleep 1h || client_restart
         else
@@ -1104,7 +1106,6 @@ uninstall() {
   # 卸载 Linux Client
   uninstall_client() {
     warp-cli --accept-tos disconnect >/dev/null 2>&1
-    warp-cli --accept-tos disable-always-on >/dev/null 2>&1
     warp-cli --accept-tos registration delete >/dev/null 2>&1
     rule_del >/dev/null 2>&1
     ${PACKAGE_UNINSTALL[int]} cloudflare-warp 2>/dev/null
@@ -1114,7 +1115,14 @@ uninstall() {
 
   # 卸载 Wireproxy
   uninstall_wireproxy() {
-    systemctl disable --now wireproxy
+    if [ "$SYSTEM" = Alpine ]; then
+      rc-update del wireproxy default
+      rc-service wireproxy stop >/dev/null 2>&1
+      rm -f /etc/init.d/wireproxy
+    else
+      systemctl disable --now wireproxy
+    fi
+
     cancel_account /etc/wireguard/warp-account.conf
     rm -rf /usr/bin/wireguard-go /usr/bin/warp /etc/dnsmasq.d/warp.conf /usr/bin/wireproxy /lib/systemd/system/wireproxy.service
     [ -e /etc/gai.conf ] && sed -i '/^precedence \:\:ffff\:0\:0/d;/^label 2002\:\:\/16/d' /etc/gai.conf
@@ -1262,13 +1270,13 @@ onoff() {
 # Client 开关，先检查是否已安装，再根据当前状态转向相反状态
 client_onoff() {
   [ ! -x "$(type -p warp-cli)" ] && error " $(text 93) "
-  if [ "$(systemctl is-active warp-svc)" = 'active' ]; then
+  if [ "$(warp-cli --accept-tos status | awk '/Status update/{for (i=0; i<NF; i++) if ($i=="update:") {print $(i+1)}}')" = 'Connected' ]; then
     local CLIENT_MODE=$(warp-cli --accept-tos settings | awk '/Mode:/{for (i=0; i<NF; i++) if ($i=="Mode:") {print $(i+1)}}')
     [ "$CLIENT_MODE" = 'Warp' ] && rule_del >/dev/null 2>&1
-    systemctl stop warp-svc
+    warp-cli --accept-tos disconnect >/dev/null 2>&1
     info " $(text 91) " && exit 0
   else
-    systemctl start warp-svc; sleep 2
+    warp-cli --accept-tos connect >/dev/null 2>&1; sleep 2
     local CLIENT_MODE=$(warp-cli --accept-tos settings | awk '/Mode:/{for (i=0; i<NF; i++) if ($i=="Mode:") {print $(i+1)}}')
     if [ "$CLIENT_MODE" = 'WarpProxy' ]; then
       ip_case d client
@@ -1296,21 +1304,21 @@ wireproxy_onoff() {
   unset QUOTA
   [ ! -x "$(type -p wireproxy)" ] && error " $(text 157) " || PUFFERFFISH=1
   if ss -nltp | awk '{print $NF}' | awk -F \" '{print $2}' | grep -q wireproxy; then
-    systemctl stop wireproxy
+    [ "$SYSTEM" = Alpine ] && rc-service wireproxy stop >/dev/null 2>&1 || systemctl stop wireproxy
     [[ ! $(ss -nltp | awk '{print $NF}' | awk -F \" '{print $2}') =~ wireproxy ]] && info " $(text 158) "
   else
     local i=1; local j=3
     hint " $(text 11)\n $(text 12) "
-    systemctl start wireproxy; sleep 1
+    [ "$SYSTEM" = Alpine ] && rc-service wireproxy start >/dev/null 2>&1 || systemctl start wireproxy; sleep 1
     ip_case d wireproxy
 
     until [[ "$WIREPROXY_TRACE4$WIREPROXY_TRACE6" =~ on|plus ]]; do
       (( i++ )) || true
       hint " $(text 12) "
-      systemctl restart wireproxy; sleep 1
+      [ "$SYSTEM" = Alpine ] && rc-service wireproxy restart >/dev/null 2>&1 || systemctl restart wireproxy; sleep 1
       ip_case d wireproxy
       if [[ "$i" = "$j" ]]; then
-        systemctl stop wireproxy
+        [ "$SYSTEM" = Alpine ] && rc-service wireproxy stop >/dev/null 2>&1 || systemctl stop wireproxy
         [ -z "$CONFIRM_TEAMS_INFO" ] && error " $(text 13) " || break
       fi
     done
@@ -1469,16 +1477,17 @@ check_system_info() {
   else
     cat >/usr/bin/tun.sh << EOF
 #!/usr/bin/env bash
+
 mkdir -p /dev/net
 mknod /dev/net/tun c 10 200 2>/dev/null
 [ ! -e /dev/net/tun ] && exit 1
 chmod 0666 /dev/net/tun
 EOF
-    bash /usr/bin/tun.sh
+    chmod +x /usr/bin/tun.sh
+    /usr/bin/tun.sh
     TUN=$(cat /dev/net/tun 2>&1)
     if [[ "$TUN" =~ 'in bad state'|'处于错误状态' ]]; then
       WIREGUARD_GO_ENABLE=1
-      chmod +x /usr/bin/tun.sh
       [ "$SYSTEM" != Alpine ] && echo "@reboot root bash /usr/bin/tun.sh" >> /etc/crontab
     else
       WIREGUARD_GO_ENABLE=0
@@ -2239,7 +2248,18 @@ BindAddress = 127.0.0.1:$PORT
 EOF
 
     # 创建 WireProxy systemd 进程守护
-    if [ "$SYSTEM" != Alpine ]; then
+    if [ "$SYSTEM" = Alpine ]; then
+      cat > /etc/init.d/wireproxy << EOF
+#!/sbin/openrc-run
+
+description="WireProxy for WARP"
+command="/usr/bin/wireproxy"
+command_args="-c /etc/wireguard/proxy.conf"
+command_background=true
+pidfile="/var/run/wireproxy.pid"
+EOF
+      chmod +x /etc/init.d/wireproxy
+    else
       cat > /lib/systemd/system/wireproxy.service << EOF
 [Unit]
 Description=WireProxy for WARP
@@ -2286,7 +2306,8 @@ EOF
     fi
 
     # 设置开机启动 wireproxy
-    systemctl enable --now wireproxy; sleep 1
+    [ "$SYSTEM" = Alpine ] && rc-update add wireproxy default || systemctl enable --now wireproxy
+    sleep 1
 
     # 结果提示，脚本运行时间，次数统计
     end=$(date +%s)
@@ -2358,7 +2379,8 @@ client_install() {
       [ ! -d /var/lib/cloudflare-warp ] && mkdir -p /var/lib/cloudflare-warp
       echo '{"registration_id":"317b5a76-3da1-469f-88d6-c3b261da9f10","api_token":"11111111-1111-1111-1111-111111111111","secret_key":"CNUysnWWJmFGTkqYtg/wpDfURUWvHB8+U1FLlVAIB0Q=","public_key":"DuOi83pAIsbJMP3CJpxq6r3LVGHtqLlzybEIvbczRjo=","override_codes":null}' > /var/lib/cloudflare-warp/reg.json
       echo '{"own_public_key":"DuOi83pAIsbJMP3CJpxq6r3LVGHtqLlzybEIvbczRjo=","registration_id":"317b5a76-3da1-469f-88d6-c3b261da9f10","time_created":{"secs_since_epoch":1692163041,"nanos_since_epoch":81073202},"interface":{"v4":"172.16.0.2","v6":"2606:4700:110:8d4e:cef9:30c2:6d4a:f97b"},"endpoints":[{"v4":"162.159.192.7:2408","v6":"[2606:4700:d0::a29f:c007]:2408"},{"v4":"162.159.192.7:500","v6":"[2606:4700:d0::a29f:c007]:500"},{"v4":"162.159.192.7:1701","v6":"[2606:4700:d0::a29f:c007]:1701"},{"v4":"162.159.192.7:4500","v6":"[2606:4700:d0::a29f:c007]:4500"}],"public_key":"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=","account":{"account_type":"free","id":"7e0e6c80-24c5-49ba-ba3d-087f45fcd1e9","license":"n01H3Cf4-3Za40C7b-5qOs0c42"},"policy":null,"valid_until":"2023-08-17T05:17:21.081073724Z","alternate_networks":null,"dex_tests":null,"custom_cert_settings":null}' > /var/lib/cloudflare-warp/conf.json
-      systemctl restart warp-svc
+      warp-cli --accept-tos disconnect >/dev/null 2>&1
+      warp-cli --accept-tos connect >/dev/null 2>&1
       sleep 1
       [[ $(warp-cli --accept-tos registration show) =~ 'Free' ]] && warning "\n $(text 107) \n"
     elif [ -n "$LICENSE" ]; then
@@ -2375,7 +2397,6 @@ client_install() {
       warp-cli --accept-tos mode warp >/dev/null 2>&1
       warp-cli --accept-tos tunnel endpoint "$ENDPOINT" >/dev/null 2>&1
       warp-cli --accept-tos connect >/dev/null 2>&1
-      warp-cli --accept-tos enable-always-on >/dev/null 2>&1
       sleep 5
       rule_add >/dev/null 2>&1
       ip_case d luban
@@ -2383,17 +2404,14 @@ client_install() {
         (( i++ )) || true
         hint " $(text 12) "
         warp-cli --accept-tos disconnect >/dev/null 2>&1
-        warp-cli --accept-tos disable-always-on >/dev/null 2>&1
         rule_del >/dev/null 2>&1
         sleep 2
         warp-cli --accept-tos connect >/dev/null 2>&1
-        warp-cli --accept-tos enable-always-on >/dev/null 2>&1
         sleep 5
         rule_add >/dev/null 2>&1
         ip_case d luban
         if [ "$i" = "$j" ]; then
           warp-cli --accept-tos disconnect >/dev/null 2>&1
-          warp-cli --accept-tos disable-always-on >/dev/null 2>&1
           rule_del >/dev/null 2>&1
           error " $(text 13) "
         fi
@@ -2404,14 +2422,14 @@ client_install() {
       warp-cli --accept-tos proxy port "$PORT" >/dev/null 2>&1
       warp-cli --accept-tos tunnel endpoint "$ENDPOINT" >/dev/null 2>&1
       warp-cli --accept-tos connect >/dev/null 2>&1
-      warp-cli --accept-tos enable-always-on >/dev/null 2>&1
       sleep 2 && [[ ! $(ss -nltp | awk '{print $NF}' | awk -F \" '{print $2}') =~ warp-svc ]] && error " $(text 87) " || info " $(text 86) "
     fi
   }
 
-  # 禁止安装的情况。重复安装，非 AMD64 CPU 架构
+  # 禁止安装的情况: 1. 重复安装; 2. 非 AMD64 CPU 架构; 3. 非 Ubuntu / Debian / CentOS 系统
   [ "$CLIENT" -ge 2 ] && error " $(text 85) "
   [ "$ARCHITECTURE" != amd64 ] && error " $(text 101) "
+  [[ ! "$SYSTEM" =~ Ubuntu|Debian|CentOS ]] && error " $(text 191) "
 
   # 安装 WARP Linux Client
   [[ "$SYSTEM" = 'CentOS' && "$(expr "$SYS" : '.*\s\([0-9]\{1,\}\)\.*')" -le 7 ]] && error " $(text 145) "
