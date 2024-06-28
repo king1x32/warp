@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # 当前脚本版本号
-VERSION='3.0.7'
+VERSION='3.0.8'
 
 # IP API 服务商
 IP_API=("https://api-ipv4.ip.sb/geoip" "https://api-ipv6.ip.sb/geoip" "https://ifconfig.co/json" "https://www.cloudflare.com/cdn-cgi/trace" "http://ip-api.com/json/")
@@ -16,8 +16,8 @@ GH_PROXY='https://ghproxy.lvedong.eu.org/'
 
 E[0]="\n Language:\n 1. English (default) \n 2. 简体中文\n"
 C[0]="${E[0]}"
-E[1]="Support CentOS 9 / Alma Linux 9 / Rocky Linux 9 system."
-C[1]="支持 CentOS 9 / Alma Linux 9 / Rocky Linux 9 系统"
+E[1]="The official WARP Linux Client supports arm64 systems and is available in both socks5 proxy and Warp interface modes."
+C[1]="官方 WARP Linux Client 支持 arm64 系统， Socks5 proxy 模式 和 Warp interface 模式均可用"
 E[2]="The script must be run as root, you can enter sudo -i and then download and run again. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
 C[2]="必须以root方式运行脚本，可以输入 sudo -i 后重新下载运行，问题反馈:[https://github.com/fscarmen/warp-sh/issues]"
 E[3]="The TUN module is not loaded. You should turn it on in the control panel. Ask the supplier for more help. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
@@ -180,10 +180,10 @@ E[81]="Step 3/3: Searching for the best MTU value and endpoint address are ready
 C[81]="进度 3/3: 寻找 MTU 最优值和优选 endpoint 地址已完成"
 E[82]="Install CloudFlare Client and set mode to Proxy (bash menu.sh c)"
 C[82]="安装 CloudFlare Client 并设置为 Proxy 模式 (bash menu.sh c)"
-E[83]="Step 1/2: Installing WARP Client..."
-C[83]="进度 1/2: 安装 Client……"
-E[84]="Step 2/2: Setting Client Mode"
-C[84]="进度 2/2: 设置 Client 模式"
+E[83]="Step 1/3: Installing WARP Client..."
+C[83]="进度 1/3: 安装 Client……"
+E[84]="Step 2/3: Setting Client Mode"
+C[84]="进度 2/3: 设置 Client 模式"
 E[85]="Client was installed.\n connect/disconnect by [warp r].\n uninstall by [warp u]"
 C[85]="Linux Client 已安装\n 连接/断开: warp r\n 卸载: warp u"
 E[86]="Client is working. Socks5 proxy listening on: \$(ss -nltp | grep -E 'warp|wireproxy' | awk '{print \$4}')"
@@ -216,8 +216,8 @@ E[99]="WireProxy is connected"
 C[99]="WireProxy 已连接"
 E[100]="License should be 26 characters, please re-enter WARP+ License. Otherwise press Enter to continue. \(\${i} times remaining\): "
 C[100]="License 应为26位字符,请重新输入 WARP+ License \(剩余\${i}次\): "
-E[101]="Client support amd64 only. Curren architecture \$ARCHITECTURE. Official Support List: [https://pkg.cloudflareclient.com/packages/cloudflare-warp]. The script is aborted. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
-C[101]="Client 只支持 amd64 架构，当前架构 \$ARCHITECTURE，官方支持列表: [https://pkg.cloudflareclient.com/packages/cloudflare-warp]。脚本中止，问题反馈:[https://github.com/fscarmen/warp-sh/issues]"
+E[101]="Client support amd64 and arm64 only. Curren architecture \$ARCHITECTURE. Official Support List: [https://pkg.cloudflareclient.com/packages/cloudflare-warp]. The script is aborted. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
+C[101]="Client 只支持 amd64 和 arm64 架构，当前架构 \$ARCHITECTURE，官方支持列表: [https://pkg.cloudflareclient.com/packages/cloudflare-warp]。脚本中止，问题反馈:[https://github.com/fscarmen/warp-sh/issues]"
 E[102]="Please customize the WARP+ device name \(Default is \$(hostname)\):"
 C[102]="请自定义 WARP+ 设备名 \(默认为 \$(hostname)\):"
 E[103]="Port \$PORT is in use. Please input another Port\(\${i} times remaining\):"
@@ -326,8 +326,8 @@ E[154]="1. WARP account\n 2. WARP Linux Client account\n 3. WireProxy account"
 C[154]="1. WARP 账户\n 2. WARP Linux Client 账户\n 3. WireProxy 账户"
 E[155]="WARP has not been installed yet."
 C[155]="WARP 还未安装"
-E[156]="(!!! AMD64 only, do not select.)"
-C[156]="(!!! 只支持 AMD64，请勿选择)"
+E[156]="(!!! Only supports amd64 and arm64, do not select.)"
+C[156]="(!!! 只支持 amd64 和 arm64，请勿选择)"
 E[157]="WireProxy has not been installed yet."
 C[157]="WireProxy 还未安装"
 E[158]="WireProxy is disconnected. It could be connect again by [warp y]"
@@ -1110,7 +1110,7 @@ uninstall() {
     rule_del >/dev/null 2>&1
     ${PACKAGE_UNINSTALL[int]} cloudflare-warp 2>/dev/null
     systemctl disable --now warp-svc >/dev/null 2>&1
-    rm -rf /usr/bin/wireguard-go /usr/bin/warp $HOME/.local/share/warp /etc/apt/sources.list.d/cloudflare-client.list /etc/yum.repos.d/cloudflare-warp.repo
+    rm -rf /usr/bin/wireguard-go /usr/bin/warp $HOME/.local/share/warp /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg /etc/apt/sources.list.d/cloudflare-client.list /etc/yum.repos.d/cloudflare-warp.repo
   }
 
   # 卸载 Wireproxy
@@ -1524,7 +1524,7 @@ EOF
   # 判断处理器架构
   case $(uname -m) in
     aarch64 )
-      ARCHITECTURE=arm64; AMD64_ONLY="$(text 156)"
+      ARCHITECTURE=arm64
       ;;
     x86_64 )
       ARCHITECTURE=amd64
@@ -2389,6 +2389,13 @@ client_install() {
       [ "$CLIENT_ACCOUNT" = Limited ] && TYPE='+' && echo "$LICENSE" > /etc/wireguard/license && info " $(text 62) " ||
       warning " $(text 36) "
     fi
+
+    # 优选 WARP Endpoint，并设置
+    best_endpoint
+    warp-cli --accept-tos tunnel endpoint set $ENDPOINT >/dev/null 2>&1
+    [ "$(warp-cli --accept-tos settings | awk '/WARP endpoint/{print $NF}')" = "$ENDPOINT" ] && info "\n $(text 81) \n"
+
+    # 判断安装模式: LUBAN=1 为 warp interface 模式，否则为 socks5 proxy 模式
     if [ "$LUBAN" = 1 ]; then
       i=1; j=3
       hint " $(text 11)\n $(text 12) "
@@ -2428,7 +2435,7 @@ client_install() {
 
   # 禁止安装的情况: 1. 重复安装; 2. 非 AMD64 CPU 架构; 3. 非 Ubuntu / Debian / CentOS 系统
   [ "$CLIENT" -ge 2 ] && error " $(text 85) "
-  [ "$ARCHITECTURE" != amd64 ] && error " $(text 101) "
+  [[ ! "$ARCHITECTURE" =~ ^(arm64|amd64)$ ]] && error " $(text 101) "
   [[ ! "$SYSTEM" =~ Ubuntu|Debian|CentOS ]] && error " $(text 191) "
 
   # 安装 WARP Linux Client
@@ -2446,8 +2453,8 @@ client_install() {
       local VERSION_CODENAME=$(awk -F '=' '/VERSION_CODENAME/{print $2}' /etc/os-release | sed 's/noble/jammy/')
       [[ "$SYSTEM" = Debian && ! $(type -P gpg 2>/dev/null) ]] && ${PACKAGE_INSTALL[int]} gnupg
       [[ "$SYSTEM" = Debian && ! $(apt list 2>/dev/null | grep apt-transport-https ) =~ installed ]] && ${PACKAGE_INSTALL[int]} apt-transport-https
-      curl https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-      echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $VERSION_CODENAME main" | tee /etc/apt/sources.list.d/cloudflare-client.list
+      curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+      echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $VERSION_CODENAME main" | tee /etc/apt/sources.list.d/cloudflare-client.list
     fi
     ${PACKAGE_UPDATE[int]}
     ${PACKAGE_INSTALL[int]} cloudflare-warp

@@ -23,18 +23,20 @@
 * * *
 
 ## 更新信息
+2024.6.28 menu.sh v3.0.8 The official WARP Linux Client supports arm64 systems and is available in both socks5 proxy and Warp interface modes; 官方 WARP Linux Client 支持 arm64 系统， Socks5 proxy 模式 和 Warp interface 模式均可用
+
 2024.6.2 menu.sh v3.0.7 Support CentOS 9 / Alma Linux 9 / Rocky Linux 9 system; 支持 CentOS 9 / Alma Linux 9 / Rocky Linux 9 系统
 
 2024.5.5 menu.sh v3.0.6 / warp-go.sh v1.1.8 Support Alpine edge system; 支持 Alpine edge 系统
 
 2024.5.1 menu.sh v3.0.5 Deal with apt library changes for Debian 10 installations of wireguard-tools; 处理 Debian 10 安装 wireguard-tools 的 apt 库变更的问题
 
-2024.4.14 menu.sh v3.0.4 1. Alpine check and update the wget version; 2. Add a message for feedback when connect warp fails; 1. Alpine 检测并更新 wget 版本的； 2. 获取 IP 失败时增加提示信息以便反馈
-
 <details>
     <summary>历史更新 history（点击即可展开或收起）</summary>
 <br>
 
+>2024.4.14 menu.sh v3.0.4 1. Alpine check and update the wget version; 2. Add a message for feedback when connect warp fails; 1. Alpine 检测并更新 wget 版本的； 2. 获取 IP 失败时增加提示信息以便反馈
+>
 >2024.3.21 menu.sh v3.0.3 / warp-go.sh 1.1.7 1. Update some commands according to warp-cli; 2. Remove the github cdn; 1. 根据 warp-cli 官方更新部分命令； 2. 去掉 Github cdn
 >
 >2024.2.7 menu.sh v3.0.2 To check if the WireGuard kernel module is already loaded. If not, attempt to load it and recheck; 判断系统是否已经加载 wireguard 内核模块，如果还没有则尝试加载，再重新判断
