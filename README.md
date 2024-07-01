@@ -23,6 +23,8 @@
 * * *
 
 ## 更新信息
+2024.6.30 menu.sh v3.0.9 1. By multithreading, parallel processing of optimal MTU, optimal endpoint, downloading wireguard-go and installing dependencies, the script runtime is reduced by more than half; 2. Reverse proxy http://ip-api.com/json and https://hits.seeyoufarm.com with cloudflare worker for better dual-stack support and faster fetching; 3. DNS Priority: Cloudflare 1.1.1.1 > Google 8.8.8.8; 1. 通过多线程，并行处理最优 MTU，最优 endpoint，下载 wireguard-go 和安装依赖， 脚本运行时间缩短一半以上; 2. 用 Cloudflare worker 反向代理 http://ip-api.com/json 和 https://hits.seeyoufarm.com，以更好支持双栈及提升获取速度; 3. DNS 优先级: Cloudflare 1.1.1.1 > Google 8.8.8.8
+
 2024.6.28 menu.sh v3.0.8 The official WARP Linux Client supports arm64 systems and is available in both socks5 proxy and Warp interface modes; 官方 WARP Linux Client 支持 arm64 系统， Socks5 proxy 模式 和 Warp interface 模式均可用
 
 2024.6.2 menu.sh v3.0.7 Support CentOS 9 / Alma Linux 9 / Rocky Linux 9 system; 支持 CentOS 9 / Alma Linux 9 / Rocky Linux 9 系统

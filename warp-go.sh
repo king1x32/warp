@@ -3,11 +3,6 @@
 # 当前脚本版本号和新增功能
 VERSION='1.1.8'
 
-# IP API 服务商
-IP_API=("http://ip-api.com/json/" "https://api.ip.sb/geoip" "https://ifconfig.co/json" "https://www.cloudflare.com/cdn-cgi/trace")
-ISP=("isp" "isp" "asn_org")
-IP=("query" "ip" "ip")
-
 # 判断 Teams token 最少字符数
 TOKEN_LENGTH=800
 
@@ -17,7 +12,7 @@ export DEBIAN_FRONTEND=noninteractive
 # Github 反代加速代理
 GH_PROXY='https://ghproxy.agrayman.gay/'
 
-trap "rm -f /tmp/warp-go*; exit 1" INT
+trap "rm -f /tmp/warp-go*; exit" INT
 
 E[0]="Language:\n  1.English (default) \n  2.简体中文"
 C[0]="${E[0]}"
@@ -247,14 +242,6 @@ reading() { read -rp "$(info "$1")" "$2"; }
 text() { eval echo "\${${L}[$*]}"; }
 text_eval() { eval echo "\$(eval echo "\${${L}[$*]}")"; }
 
-# 自定义谷歌翻译函数，使用两个翻译 api，如均不能翻译，则返回原英文
-translate() {
-  [ -n "$@" ] && local EN="$@"
-  [ -z "$ZH" ] && local ZH=$(curl -km8 -sSL "https://translate.google.com/translate_a/t?client=any_client_id_works&sl=en&tl=zh&q=${EN//[[:space:]]/%20}" 2>/dev/null | awk -F '"' '{print $2}')
-  [ -z "$ZH" ] && local ZH=$(curl -km8 -sSL "https://findmyip.net/api/translate.php?text=${EN//[[:space:]]/%20}" 2>/dev/null | awk -F '"' '{print $16}')
-  [ -z "$ZH" ] && echo "$EN" || echo "$ZH"
-}
-
 # 检测是否需要启用 Github CDN，如能直接连通，则不使用
 check_cdn() {
   [ -n "$GH_PROXY" ] && wget --server-response --quiet --output-document=/dev/null --no-check-certificate --tries=2 --timeout=3 https://raw.githubusercontent.com/fscarmen/warp-sh/main/README.md >/dev/null 2>&1 && unset GH_PROXY
@@ -262,7 +249,7 @@ check_cdn() {
 
 # 脚本当天及累计运行次数统计
 statistics_of_run-times() {
-  local COUNT=$(curl --retry 2 -ksm2 "https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fraw.githubusercontent.com%2Ffscarmen%2Fwarp%2Fmain%2Fwarp-go.sh&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=hits&edge_flat=false" 2>&1 | grep -m1 -oE "[0-9]+[ ]+/[ ]+[0-9]+") &&
+  local COUNT=$(curl --retry 2 -ksm2 "https://hit.forvps.gq/https://raw.githubusercontent.com/fscarmen/warp/main/warp-go.sh" 2>&1 | grep -m1 -oE "[0-9]+[ ]+/[ ]+[0-9]+") &&
   TODAY=$(cut -d " " -f1 <<< "$COUNT") &&
   TOTAL=$(cut -d " " -f3 <<< "$COUNT")
 }
@@ -275,7 +262,7 @@ select_language() {
   if [ -s /opt/warp-go/language ]; then
     L=$(cat /opt/warp-go/language)
   else
-    L=E && [[ -z "$OPTION" || "$OPTION" = [ahvi46d] ]] && hint " $(text 0) " && reading " $(text 4) " LANGUAGE
+    L=E && [[ -z "$OPTION" || "$OPTION" = [ahvi46d] ]] && hint " $(text 0) \n" && reading " $(text 4) " LANGUAGE
     [ "$LANGUAGE" = 2 ] && L=C
   fi
 }
@@ -422,31 +409,31 @@ check_install() {
 
 # 检测 IPv4 IPv6 信息，WARP Ineterface 开启，普通还是 Plus账户 和 IP 信息
 ip4_info() {
-  unset IP4 COUNTRY4 ASNORG4 TRACE4 PLUS4 WARPSTATUS4 ERROR4
-  IP4_API=${IP_API[0]} && ISP4=${ISP[0]} && IP4_KEY=${IP[0]}
-  TRACE4=$(curl --retry 5 -ks4m5 ${IP_API[3]} $INTERFACE4 | grep warp | sed "s/warp=//g")
+  unset IP4_JSON COUNTRY4 ASNORG4 TRACE4
+  [ "$L" = 'C' ] && IS_CHINESE=${IS_CHINESE:-'?lang=zh-CN'}
+  TRACE4=$(curl --retry 5 -ks4m5 https://www.cloudflare.com/cdn-cgi/trace $INTERFACE4 | awk -F '=' '/^warp=/{print $NF}')
   if [ -n "$TRACE4" ]; then
-    IP4=$(curl --retry 7 -ks4m5 -A Mozilla $IP4_API $INTERFACE4)
-    [[ -z "$IP4" || "$IP4" =~ 'error code' ]] && IP4_API=${IP_API[2]} && ISP4=${ISP[2]} && IP4_KEY=${IP[2]} && IP4=$(curl --retry 3 -ks4m5 -A Mozilla $IP4_API $INTERFACE4)
-    if [[ -n "$IP4" && ! "$IP4" =~ 'error code' ]]; then
-      WAN4=$(expr "$IP4" : '.*'$IP4_KEY'\":[ ]*\"\([^"]*\).*')
-      COUNTRY4=$(expr "$IP4" : '.*country\":[ ]*\"\([^"]*\).*')
-      ASNORG4=$(expr "$IP4" : '.*'$ISP4'\":[ ]*\"\([^"]*\).*')
+    WAN4=$(curl --retry 5 -ks4m5 -A Mozilla https://api-ipv4.ip.sb/geoip $INTERFACE4 | sed 's/.*"ip":"\([^"]\+\)".*/\1/')
+    [ -n "$WAN4" ] && IP4_JSON=$(curl --retry 2 -ksm5 --user-agent Mozilla https://ip.forvps.gq/${WAN4}${IS_CHINESE})
+    IP4_JSON=${IP4_JSON:-"$(curl --retry 2 -ks4m3 --user-agent Mozilla https://ifconfig.co/json $INTERFACE4)"}
+    if [ -n "$IP4_JSON" ]; then
+      COUNTRY4=$(sed -En 's/.*"country":[ ]*"([^"]+)".*/\1/p' <<< "$IP4_JSON")
+      ASNORG4=$(sed -En 's/.*"(isp|asn_org)":[ ]*"([^"]+)".*/\2/p' <<< "$IP4_JSON")
     fi
   fi
 }
 
 ip6_info() {
-  unset IP6 COUNTRY6 ASNORG6 TRACE6 PLUS6 WARPSTATUS6 ERROR6
-  IP6_API=${IP_API[1]} && ISP6=${ISP[1]} && IP6_KEY=${IP[1]}
-  TRACE6=$(curl --retry 5 -ks6m5 ${IP_API[3]} $INTERFACE6 | grep warp | sed "s/warp=//g")
+  unset IP6_JSON COUNTRY6 ASNORG6 TRACE6
+  [ "$L" = 'C' ] && IS_CHINESE=${IS_CHINESE:-'?lang=zh-CN'}
+  TRACE6=$(curl --retry 5 -ks6m5 https://www.cloudflare.com/cdn-cgi/trace $INTERFACE6 | awk -F '=' '/^warp=/{print $NF}')
   if [ -n "$TRACE6" ]; then
-    IP6=$(curl --retry 7 -ks6m5 -A Mozilla $IP6_API $INTERFACE6)
-    [[ -z "$IP6" || "$IP6" =~ 'error code' ]] && IP6_API=${IP_API[2]} && ISP6=${ISP[2]} && IP6_KEY=${IP[2]} && IP6=$(curl --retry 3 -ks6m5 -A Mozilla $IP6_API $INTERFACE6)
-    if [[ -n "$IP6" && ! "$IP6" =~ 'error code' ]]; then
-      WAN6=$(expr "$IP6" : '.*'$IP6_KEY'\":[ ]*\"\([^"]*\).*')
-      COUNTRY6=$(expr "$IP6" : '.*country\":[ ]*\"\([^"]*\).*')
-      ASNORG6=$(expr "$IP6" : '.*'$ISP6'\":[ ]*\"\([^"]*\).*')
+    WAN6=$(curl --retry 5 -ks6m5 -A Mozilla https://api-ipv6.ip.sb/geoip $INTERFACE6 | sed 's/.*"ip":"\([^"]\+\)".*/\1/')
+    [ -n "$WAN6" ] && IP6_JSON=$(curl --retry 2 -ksm5 --user-agent Mozilla https://ip.forvps.gq/${WAN6}${IS_CHINESE})
+    IP6_JSON=${IP6_JSON:-"$(curl --retry 2 -ks6m3 --user-agent Mozilla https://ifconfig.co/json $INTERFACE6)"}
+    if [ -n "$IP6_JSON" ]; then
+      COUNTRY6=$(sed -En 's/.*"country":[ ]*"([^"]+)".*/\1/p' <<< "$IP6_JSON")
+      ASNORG6=$(sed -En 's/.*"(isp|asn_org)":[ ]*"([^"]+)".*/\2/p' <<< "$IP6_JSON")
     fi
   fi
 }
@@ -497,7 +484,7 @@ result_priority() {
       PRIO=6
       ;;
     * )
-      [[ "$(curl -ksm8 -A Mozilla ${IP_API[3]} | grep 'ip=' | cut -d= -f2)" =~ ^([0-9]{1,3}\.){3} ]] && PRIO=4 || PRIO=6
+      [[ "$(curl -ksm8 -A Mozilla https://ifconfig.co/json | grep 'ip=' | cut -d= -f2)" =~ ^([0-9]{1,3}\.){3} ]] && PRIO=4 || PRIO=6
   esac
   PRIORITY_NOW=$(text_eval 100)
 
@@ -592,7 +579,7 @@ change_ip() {
     ip_now=$(date +%s); RUNTIME=$((ip_now - ip_start)); DAY=$(( RUNTIME / 86400 )); HOUR=$(( (RUNTIME % 86400 ) / 3600 )); MIN=$(( (RUNTIME % 86400 % 3600) / 60 )); SEC=$(( RUNTIME % 86400 % 3600 % 60 ))
     ip${NF}_info
     WAN=$(eval echo \$WAN$NF) && ASNORG=$(eval echo \$ASNORG$NF)
-    [ "$L" = C ] && COUNTRY=$(translate "$(eval echo \$COUNTRY$NF)") || COUNTRY=$(eval echo \$COUNTRY$NF)
+    COUNTRY=$(eval echo \$COUNTRY$NF)
     unset RESULT REGION
     for p in ${!RESULT_TITLE[@]}; do
       RESULT[p]=$(curl --user-agent "${UA_Browser}" --interface WARP -$NF -fsL --write-out %{http_code} --output /dev/null --max-time 10 "https://www.netflix.com/title/${RESULT_TITLE[p]}")
@@ -624,8 +611,8 @@ uninstall() {
   [ -s /opt/warp-go/tun.sh ] && rm -f /opt/warp-go/tun.sh && sed -i '/tun.sh/d' /etc/crontab
 
   # 显示卸载结果
-  ip4_info; [ "$L" = C ] && [ -n "$COUNTRY4" ] && COUNTRY4=$(translate "$COUNTRY4")
-  ip6_info; [ "$L" = C ] && [ -n "$COUNTRY6" ] && COUNTRY6=$(translate "$COUNTRY6")
+  ip4_info
+  ip6_info
   info " $(text 17)\n IPv4: $WAN4 $COUNTRY4 $ASNORG4\n IPv6: $WAN6 $COUNTRY6 $ASNORG6 "
 }
 
@@ -644,7 +631,7 @@ ver() {
 
 # i=当前尝试次数，j=要尝试的次数
 net() {
-  unset IP4 IP6 WAN4 WAN6 COUNTRY4 COUNTRY6 ASNORG4 ASNORG6 WARPSTATUS4 WARPSTATUS6
+  unset IP4 IP6 WAN4 WAN6 COUNTRY4 COUNTRY6 ASNORG4 ASNORG6
   i=1; j=5
   grep -qE "^AllowedIPs[ ]+=.*0\.\0\/0|#AllowedIPs" 2>/dev/null /opt/warp-go/warp.conf && INTERFACE4='--interface WARP'
   grep -qE "^AllowedIPs[ ]+=.*\:\:\/0|#AllowedIPs" 2>/dev/null /opt/warp-go/warp.conf && INTERFACE6='--interface WARP'
@@ -674,9 +661,7 @@ net() {
   grep -q '#AllowedIPs' /opt/warp-go/warp.conf && GLOBAL_TYPE="$(text 24)"
 
   info " $(text_eval 25) "
-  [ "$L" = C ] && [ -n "$COUNTRY4" ] && COUNTRY4=$(translate "$COUNTRY4")
-  [ "$L" = C ] && [ -n "$COUNTRY6" ] && COUNTRY6=$(translate "$COUNTRY6")
-  [ "$OPTION" = o ] && info " IPv4: $WAN4 $WARPSTATUS4 $COUNTRY4 $ASNORG4\n IPv6: $WAN6 $WARPSTATUS6 $COUNTRY6 $ASNORG6 "
+  [ "$OPTION" = o ] && info " IPv4: $WAN4 $COUNTRY4 $ASNORG4\n IPv6: $WAN6 $COUNTRY6 $ASNORG6 "
   [ -n "$QUOTA" ] && info " $(text 26): $QUOTA "
 }
 
@@ -959,11 +944,6 @@ EOF
 
   [ "$IPV4" = 1 ] && ip4_info
   [ "$IPV6" = 1 ] && ip6_info
-
-  if [ "$L" = C ]; then
-    [ -n "$COUNTRY4" ] && COUNTRY4=$(translate "$COUNTRY4")
-    [ -n "$COUNTRY6" ] && COUNTRY6=$(translate "$COUNTRY6")
-  fi
 }
 
 # 输入 WARP+ 账户（如有），限制位数为空或者26位以防输入错误
@@ -1329,15 +1309,15 @@ EOF
   echo "$L" > /opt/warp-go/language
 
   # 结果提示，脚本运行时间，次数统计，IPv4 / IPv6 优先级别
-  [ "$(curl -ksm8 -A Mozilla ${IP_API[3]} | grep 'ip=' | cut -d= -f2)" = "$WAN6" ] && PRIO=6 || PRIO=4
+  [ "$(curl -ksm8 -A Mozilla https://ifconfig.co/json | grep 'ip=' | cut -d= -f2)" = "$WAN6" ] && PRIO=6 || PRIO=4
   end=$(date +%s)
   ACCOUNT_TYPE=$(grep "Type" /opt/warp-go/warp.conf | cut -d= -f2 | sed "s# ##g")
   [ "$ACCOUNT_TYPE" = 'plus' ] && check_quota
   result_priority
 
   echo -e "\n==============================================================\n"
-  info " IPv4: $WAN4 $WARPSTATUS4 $COUNTRY4  $ASNORG4 "
-  info " IPv6: $WAN6 $WARPSTATUS6 $COUNTRY6  $ASNORG6 "
+  info " IPv4: $WAN4 $COUNTRY4  $ASNORG4 "
+  info " IPv6: $WAN6 $COUNTRY6  $ASNORG6 "
   info " $(text_eval 62) "
   [ "$ACCOUNT_TYPE" = 'plus' ] && info " $(text 83): $(cat /opt/warp-go/Device_Name)\t $(text 26): $QUOTA "
   [ "$ACCOUNT_TYPE" = 'team' ] && info " $(text 83): $(cat /opt/warp-go/Device_Name)\t $(text 26): $(text 103) "
@@ -1428,8 +1408,8 @@ menu() {
 	hint " $(text 3) "
 	echo -e "======================================================================================================================\n"
 	info " $(text 84): $VERSION\n $(text 85): $(text 1)\n $(text 86):\n\t $(text 87): $SYS\n\t $(text 88): $(uname -r)\n\t $(text 89): $ARCHITECTURE\n\t $(text 90): $VIRT "
-	info "\t IPv4: $WAN4 $WARPSTATUS4 $COUNTRY4  $ASNORG4 "
-	info "\t IPv6: $WAN6 $WARPSTATUS6 $COUNTRY6  $ASNORG6 "
+	info "\t IPv4: $WAN4 $COUNTRY4  $ASNORG4 "
+	info "\t IPv6: $WAN6 $COUNTRY6  $ASNORG6 "
   if [ "$STATUS" = 2 ]; then
     info "\t $(text_eval 91) "
     grep -q '#AllowedIPs' /opt/warp-go/warp.conf && GLOBAL_TYPE="$(text 24)"
