@@ -409,11 +409,12 @@ check_install() {
 
 # 检测 IPv4 IPv6 信息，WARP Ineterface 开启，普通还是 Plus账户 和 IP 信息
 ip4_info() {
-  unset IP4_JSON COUNTRY4 ASNORG4 TRACE4
+  unset IP4_JSON COUNTRY4 ASNORG4 TRACE4 IS_UNINSTALL
+  IS_UNINSTALL="$1"
   [ "$L" = 'C' ] && IS_CHINESE=${IS_CHINESE:-'?lang=zh-CN'}
-  TRACE4=$(curl --retry 5 -ks4m5 https://www.cloudflare.com/cdn-cgi/trace $INTERFACE4 | awk -F '=' '/^warp=/{print $NF}')
+  TRACE4=$(curl --retry 2 -ks4m5 https://www.cloudflare.com/cdn-cgi/trace $INTERFACE4 | awk -F '=' '/^warp=/{print $NF}')
   if [ -n "$TRACE4" ]; then
-    WAN4=$(curl --retry 5 -ks4m5 -A Mozilla https://api-ipv4.ip.sb/geoip $INTERFACE4 | sed 's/.*"ip":"\([^"]\+\)".*/\1/')
+    [ "$IS_UNINSTALL" = 'is_uninstall' ] && WAN4=$(curl -4 --retry 2 -ksm5 --user-agent Mozilla https://api.ip.sb/ip) || WAN4=$(curl --retry 2 -ks4m5 -A Mozilla https://api-ipv4.ip.sb/geoip $INTERFACE4 | sed 's/.*"ip":"\([^"]\+\)".*/\1/')
     [ -n "$WAN4" ] && IP4_JSON=$(curl --retry 2 -ksm5 --user-agent Mozilla https://ip.forvps.gq/${WAN4}${IS_CHINESE})
     IP4_JSON=${IP4_JSON:-"$(curl --retry 2 -ks4m3 --user-agent Mozilla https://ifconfig.co/json $INTERFACE4)"}
     if [ -n "$IP4_JSON" ]; then
@@ -424,11 +425,12 @@ ip4_info() {
 }
 
 ip6_info() {
-  unset IP6_JSON COUNTRY6 ASNORG6 TRACE6
+  unset IP6_JSON COUNTRY6 ASNORG6 TRACE6 IS_UNINSTALL
+  IS_UNINSTALL="$1"
   [ "$L" = 'C' ] && IS_CHINESE=${IS_CHINESE:-'?lang=zh-CN'}
   TRACE6=$(curl --retry 5 -ks6m5 https://www.cloudflare.com/cdn-cgi/trace $INTERFACE6 | awk -F '=' '/^warp=/{print $NF}')
   if [ -n "$TRACE6" ]; then
-    WAN6=$(curl --retry 5 -ks6m5 -A Mozilla https://api-ipv6.ip.sb/geoip $INTERFACE6 | sed 's/.*"ip":"\([^"]\+\)".*/\1/')
+    [ "$IS_UNINSTALL" = 'is_uninstall' ] && WAN6=$(curl -6 --retry 2 -ksm5 --user-agent Mozilla https://api.ip.sb/ip) || WAN6=$(curl --retry 5 -ks6m5 -A Mozilla https://api-ipv6.ip.sb/geoip $INTERFACE6 | sed 's/.*"ip":"\([^"]\+\)".*/\1/')
     [ -n "$WAN6" ] && IP6_JSON=$(curl --retry 2 -ksm5 --user-agent Mozilla https://ip.forvps.gq/${WAN6}${IS_CHINESE})
     IP6_JSON=${IP6_JSON:-"$(curl --retry 2 -ks6m3 --user-agent Mozilla https://ifconfig.co/json $INTERFACE6)"}
     if [ -n "$IP6_JSON" ]; then
@@ -611,8 +613,8 @@ uninstall() {
   [ -s /opt/warp-go/tun.sh ] && rm -f /opt/warp-go/tun.sh && sed -i '/tun.sh/d' /etc/crontab
 
   # 显示卸载结果
-  ip4_info
-  ip6_info
+  ip4_info is_uninstall
+  ip6_info is_uninstall
   info " $(text 17)\n IPv4: $WAN4 $COUNTRY4 $ASNORG4\n IPv6: $WAN6 $COUNTRY6 $ASNORG6 "
 }
 

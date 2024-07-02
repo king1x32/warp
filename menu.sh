@@ -539,14 +539,15 @@ ip_info() {
   elif [[ "$2" =~ ^[[:alnum:]]+$ ]]; then
     local INTERFACE_SOCK5="--interface $2"
   fi
+  local IS_UNINSTALL="$3"
 
   [ "$L" = 'C' ] && IS_CHINESE=${IS_CHINESE:-'?lang=zh-CN'}
   [ "$CHECK_46" = '6' ] && CHOOSE_IP_API='https://api-ipv6.ip.sb/geoip' || CHOOSE_IP_API='https://api-ipv4.ip.sb/geoip'
   IP_TRACE=$(curl --retry 2 -ksm5 $INTERFACE_SOCK5 https://www.cloudflare.com/cdn-cgi/trace | awk -F '=' '/^warp=/{print $NF}')
   if [ -n "$IP_TRACE" ]; then
-    local API_IP=$(curl --retry 2 -ksm5 $INTERFACE_SOCK5 --user-agent Mozilla $CHOOSE_IP_API | sed 's/.*"ip":"\([^"]\+\)".*/\1/')
-    [ -n "$API_IP" ] && local IP_JSON=$(curl --retry 2 -ksm5 --user-agent Mozilla https://ip.forvps.gq/${API_IP}${IS_CHINESE})
-    IP_JSON=${IP_JSON:-"$(curl --retry 3 -ks${CHECK_46}m5 $INTERFACE_SOCK5 --user-agent Mozilla $https://ifconfig.co/json)"}
+    [ "$IS_UNINSTALL" = 'is_uninstall' ] && local API_IP=$(curl -$CHECK_46 --retry 2 -ksm5 --user-agent Mozilla https://api.ip.sb/ip) || local API_IP=$(curl --retry 2 -ksm5 $INTERFACE_SOCK5 --user-agent Mozilla $CHOOSE_IP_API | sed 's/.*"ip":"\([^"]\+\)".*/\1/')
+    [ -n "$API_IP" ] && local IP_JSON=$(curl --retry 2 -ksm5 https://ip.forvps.gq/${API_IP}${IS_CHINESE})
+    IP_JSON=${IP_JSON:-"$(curl --retry 3 -ks${CHECK_46}m5 $INTERFACE_SOCK5 --user-agent Mozilla https://ifconfig.co/json)"}
 
     if [ -n "$IP_JSON" ]; then
       local WAN=$(sed -En 's/.*"(ip|query)":[ ]*"([^"]+)".*/\2/p' <<< "$IP_JSON")
@@ -566,8 +567,9 @@ ip_case() {
 
   if [ "$CHECK_TYPE" = "warp" ]; then
     fetch_4() {
-      unset IP_RESULT4 COUNTRY4 ASNORG4 TRACE4
-      local IP_RESULT4=$(ip_info 4 $CHECK_NONGLOBAL)
+      unset IP_RESULT4 COUNTRY4 ASNORG4 TRACE4 IS_UNINSTALL
+      local IS_UNINSTALL=${IS_UNINSTALL:-"$1"}
+      local IP_RESULT4=$(ip_info 4 "$CHECK_NONGLOBAL" "$IS_UNINSTALL")
       TRACE4=$(expr "$IP_RESULT4" : '.*trace=\([^@]*\).*')
       WAN4=$(expr "$IP_RESULT4" : '.*ip=\([^@]*\).*')
       COUNTRY4=$(expr "$IP_RESULT4" : '.*country=\([^@]*\).*')
@@ -575,8 +577,9 @@ ip_case() {
     }
 
     fetch_6() {
-      unset IP_RESULT6 COUNTRY6 ASNORG6 TRACE6
-      local IP_RESULT6=$(ip_info 6 $CHECK_NONGLOBAL)
+      unset IP_RESULT6 COUNTRY6 ASNORG6 TRACE6 IS_UNINSTALL
+      local IS_UNINSTALL=${IS_UNINSTALL:-"$1"}
+      local IP_RESULT6=$(ip_info 6 "$CHECK_NONGLOBAL" "$IS_UNINSTALL")
       TRACE6=$(expr "$IP_RESULT6" : '.*trace=\([^@]*\).*')
       WAN6=$(expr "$IP_RESULT6" : '.*ip=\([^@]*\).*')
       COUNTRY6=$(expr "$IP_RESULT6" : '.*country=\([^@]*\).*')
@@ -596,6 +599,11 @@ ip_case() {
           fetch_4
           fetch_6
         fi
+        ;;
+      u )
+        # 卸载的话，使用不同的 IP api
+        fetch_4 is_uninstall
+        fetch_6 is_uninstall
     esac
   elif [ "$CHECK_TYPE" = "wireproxy" ]; then
     fetch_4() {
@@ -1141,7 +1149,7 @@ uninstall() {
 
   # 显示卸载结果
   systemctl restart systemd-resolved >/dev/null 2>&1; sleep 3
-  ip_case d warp
+  ip_case u warp
   info " $(text 45)\n IPv4: $WAN4 $COUNTRY4 $ASNORG4\n IPv6: $WAN6 $COUNTRY6 $ASNORG6 "
 }
 
