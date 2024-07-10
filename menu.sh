@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # 当前脚本版本号
-VERSION='3.0.9'
+VERSION='3.0.10'
 
 # 环境变量用于在Debian或Ubuntu操作系统中设置非交互式（noninteractive）安装模式
 export DEBIAN_FRONTEND=noninteractive
@@ -13,8 +13,8 @@ trap "rm -f /tmp/{wireguard-go-*,best_mtu,best_endpoint,endpoint,ip}; exit" INT
 
 E[0]="\n Language:\n 1. English (default) \n 2. 简体中文"
 C[0]="${E[0]}"
-E[1]="1. By multithreading, parallel processing of optimal MTU, optimal endpoint, downloading wireguard-go and installing dependencies, the script runtime is reduced by more than half; 2. Reverse proxy http://ip-api.com/json and https://hits.seeyoufarm.com with cloudflare worker for better dual-stack support and faster fetching; 3. DNS Priority: Cloudflare 1.1.1.1 > Google 8.8.8.8"
-C[1]="1. 通过多线程，并行处理最优 MTU，最优 endpoint，下载 wireguard-go 和安装依赖， 脚本运行时间缩短一半以上; 2. 用 Cloudflare worker 反向代理 http://ip-api.com/json 和 https://hits.seeyoufarm.com，以更好支持双栈及提升获取速度; 3. DNS 优先级: Cloudflare 1.1.1.1 > Google 8.8.8.8"
+E[1]="Publish warp api, you can register account, join Zero Trust, check account information and all other operations. Detailed instructions: https://warp.cloudflare.now.cc/; 2. Scripts to update the warp api."
+C[1]="发布 warp api，可以注册账户，加入 Zero Trust，查账户信息等所有的操作。详细使用说明: https://warp.cloudflare.now.cc/; 2. 脚本更新 warp api"
 E[2]="The script must be run as root, you can enter sudo -i and then download and run again. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
 C[2]="必须以root方式运行脚本，可以输入 sudo -i 后重新下载运行，问题反馈:[https://github.com/fscarmen/warp-sh/issues]"
 E[3]="The TUN module is not loaded. You should turn it on in the control panel. Ask the supplier for more help. Feedback: [https://github.com/fscarmen/warp-sh/issues]"
@@ -499,13 +499,12 @@ check_dependencies() {
   if [ "$SYSTEM" = 'Alpine' ]; then
     CHECK_WGET=$(wget 2>&1 | head -n 1)
     grep -qi 'busybox' <<< "$CHECK_WGET" && ${PACKAGE_INSTALL[int]} wget >/dev/null 2>&1
-    DEPS_CHECK=("ping" "curl" "grep" "bash" "xxd" "ip" "python3" "virt-what")
-    DEPS_INSTALL=("iputils-ping" "curl" "grep" "bash" "xxd" "iproute2" "python3" "virt-what")
+    DEPS_CHECK=("ping" "curl" "grep" "bash" "ip" "python3" "virt-what")
+    DEPS_INSTALL=("iputils-ping" "curl" "grep" "bash" "iproute2" "python3" "virt-what")
   else
-    # 对于 CentOS 系统，xxd 需要依赖 vim-common
-    [ "$SYSTEM" = 'CentOS' ] && ${PACKAGE_INSTALL[int]} vim-common >/dev/null 2>&1
-    DEPS_CHECK=("ping" "xxd" "wget" "curl" "systemctl" "ip" "python3")
-    DEPS_INSTALL=("iputils-ping" "xxd" "wget" "curl" "systemctl" "iproute2" "python3")
+    # 对于三大系统需要的依赖
+    DEPS_CHECK=("ping" "wget" "curl" "systemctl" "ip" "python3")
+    DEPS_INSTALL=("iputils-ping" "wget" "curl" "systemctl" "iproute2" "python3")
   fi
 
   for g in "${!DEPS_CHECK[@]}"; do
@@ -523,12 +522,79 @@ check_dependencies() {
   PING6='ping -6' && [ -x "$(type -p ping6)" ] && PING6='ping6'
 }
 
-# 只保留Teams账户，删除其他账户
-cancel_account(){
-  local FILE=$1
-  if [ -s "$FILE" ]; then
-    grep -oqE '"id":[ ]+"t.[A-F0-9a-f]{8}-' $FILE || bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --cancle --file $FILE >/dev/null 2>&1
+# 获取 warp 账户信息
+warp_api(){
+  local RUN=$1
+  local FILE_PATH=$2
+  local WARP_LICENSE=$3
+  local WARP_DEVICE_NAME=$4
+  local WARP_TEAM_TOKEN=$5
+  local WARP_CONVERT=$6
+  local WARP_CONVERT_MODE=$7
+  local WARP_API_URL="warp.cloudflare.now.cc"
+
+  if [ -s "$FILE_PATH" ]; then
+    # Teams 账户文件
+    if grep -q 'xml version' $FILE_PATH; then
+      local WARP_DEVICE_ID=$(grep 'correlation_id' $FILE_PATH | sed "s#.*>\(.*\)<.*#\1#")
+      local WARP_TOKEN=$(grep 'warp_token' $FILE_PATH | sed "s#.*>\(.*\)<.*#\1#")
+      local WARP_CLIENT_ID=$(grep 'client_id' $FILE_PATH | sed "s#.*client_id&quot;:&quot;\([^&]\{4\}\)&.*#\1#")
+
+    # 官方 api 文件
+    elif grep -q 'client_id' $FILE_PATH; then
+      local WARP_DEVICE_ID=$(grep -m1 '"id' "$FILE_PATH" | cut -d\" -f4)
+      local WARP_TOKEN=$(grep '"token' "$FILE_PATH" | cut -d\" -f4)
+      local WARP_CLIENT_ID=$(grep 'client_id' "$FILE_PATH" | cut -d\" -f4)
+
+    # client 文件，默认存放路径为 /var/lib/cloudflare-warp/reg.json
+    elif grep -q 'registration_id' $FILE_PATH; then
+      local WARP_DEVICE_ID=$(cut -d\" -f4 "$FILE_PATH")
+      local WARP_TOKEN=$(cut -d\" -f8 "$FILE_PATH")
+
+    # wgcf 文件，默认存放路径为 /etc/wireguard/wgcf-account.toml
+    elif grep -q 'access_token' $FILE_PATH; then
+      id=$(grep 'device_id' "$FILE_PATH" | cut -d\' -f2)
+      token=$(grep 'access_token' "$FILE_PATH" | cut -d\' -f2)
+
+    # warp-go 文件，默认存放路径为 /opt/warp-go/warp.conf
+    elif grep -q 'PrivateKey' $FILE_PATH; then
+      id=$(awk -F' *= *' '/^Device/{print $2}' "$FILE_PATH")
+      token=$(awk -F' *= *' '/^Token/{print $2}' "$FILE_PATH")
+    fi
   fi
+  
+  case "$RUN" in
+    register )
+      curl -m5 -sL "https://${WARP_API_URL}/?run=register&team_token=${WARP_TEAM_TOKE}"
+      ;;
+    device )
+      curl -m5 -sL "https://${WARP_API_URL}/?run=device&device_id=${WARP_DEVICE_ID}&token=${WARP_TOKEN}"
+      ;;
+    name )
+      curl -m5 -sL "https://${WARP_API_URL}/?run=name&device_id=${WARP_DEVICE_ID}&token=${WARP_TOKEN}&device_name=${WARP_DEVICE_NAME}"
+      ;;
+    license )
+      curl -m5 -sL "https://${WARP_API_URL}/?run=license&device_id=${WARP_DEVICE_ID}&token=${WARP_TOKEN}&license=${WARP_LICENSE}"
+      ;;
+    cancel )
+      # 只保留Teams账户，删除其他账户
+      grep -oqE '"id":[ ]+"t.[A-F0-9a-f]{8}-' $FILE_PATH || curl -m5 -sL "https://${WARP_API_URL}/?run=cancel&device_id=${WARP_DEVICE_ID}&token=${WARP_TOKEN}"
+      ;;
+    convert )
+      if [ "$WARP_CONVERT_MODE" = decode ]; then
+        curl -m5 -sL "https://${WARP_API_URL}/?run=id&convert=${WARP_CONVERT}" | grep -A4 'reserved' | sed 's/.*\(\[.*\)/\1/g; s/],/]/' | tr -d '[:space:]'
+      elif [ "$WARP_CONVERT_MODE" = encode ]; then
+        curl -m5 -sL "https://${WARP_API_URL}/?run=id&convert=${WARP_CONVERT//[ \[\]]}" | awk -F '"' '/client_id/{print $(NF-1)}'
+      elif [ "$WARP_CONVERT_MODE" = file ]; then
+        if grep -sq '"reserved"' $FILE_PATH; then
+          grep -A4 'reserved' $FILE_PATH | sed 's/.*\(\[.*\)/\1/g; s/],/]/' | tr -d '[:space:]'
+        else
+          local WARP_CONVERT=$(awk -F '"' '/"client_id"/{print $(NF-1)}' $FILE_PATH)
+          curl -m5 -sL "https://${WARP_API_URL}/?run=id&convert=${WARP_CONVERT}" | grep -A4 'reserved' | sed 's/.*\(\[.*\)/\1/g; s/],/]/' | tr -d '[:space:]'
+        fi
+      fi
+      ;;
+  esac
 }
 
 # 聚合 IP api 函数
@@ -830,15 +896,15 @@ change_ip() {
       warning " $(text 126) "
       wg-quick down warp >/dev/null 2>&1
       [ -s /etc/wireguard/info.log ] && grep -q 'Device name' /etc/wireguard/info.log && local LICENSE=$(cat /etc/wireguard/license) && local NAME=$(awk '/Device name/{print $NF}' /etc/wireguard/info.log)
-      cancel_account /etc/wireguard/warp-account.conf
-      bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh | sed 's#cat $register_path; ##') --register --file /etc/wireguard/warp-account.conf 2>/dev/null
+      warp_api "cancel" "/etc/wireguard/warp-account.conf" >/dev/null 2>&1
+      warp_api "register" > /etc/wireguard/warp-account.conf 2>/dev/null
       # 如原来是 plus 账户，以相同的 license 升级，并修改账户和 warp 配置文件
       if [[ -n "$LICENSE" && -n "$NAME" ]]; then
-        [ -n "$LICENSE" ] && bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /etc/wireguard/warp-account.conf --license $LICENSE >/dev/null 2>&1
-        [ -n "$NAME" ] && bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /etc/wireguard/warp-account.conf --name $NAME >/dev/null 2>&1
+        [ -n "$LICENSE" ] && warp_api "license" "/etc/wireguard/warp-account.conf" "$LICENSE" >/dev/null 2>&1
+        [ -n "$NAME" ] && warp_api "name" "/etc/wireguard/warp-account.conf" "" "$NAME" >/dev/null 2>&1
         local PRIVATEKEY="$(grep 'private_key' /etc/wireguard/warp-account.conf | cut -d\" -f4)"
         local ADDRESS6="$(grep '"v6.*"$' /etc/wireguard/warp-account.conf | cut -d\" -f4)"
-        local CLIENT_ID="$(reserved_and_clientid /etc/wireguard/warp-account.conf file)"
+        local CLIENT_ID="$(warp_api "convert" "/etc/wireguard/warp-account.conf" "" "" "" "" "file")"
         [ -s /etc/wireguard/warp.conf ] && sed -i "s#\(PrivateKey[ ]\+=[ ]\+\).*#\1$PRIVATEKEY#g; s#\(Address[ ]\+=[ ]\+\).*\(/128$\)#\1$ADDRESS6\2#g; s#\(.*Reserved[ ]\+=[ ]\+\).*#\1$CLIENT_ID#g" /etc/wireguard/warp.conf
         sed -i "s#\([ ]\+\"license\": \"\).*#\1$LICENSE\"#g; s#\"account_type\".*#\"account_type\": \"limited\",#g; s#\([ ]\+\"name\": \"\).*#\1$NAME\"#g" /etc/wireguard/warp-account.conf
       fi
@@ -1078,7 +1144,7 @@ uninstall() {
     systemctl disable --now wg-quick@warp >/dev/null 2>&1; sleep 3
     [ -x "$(type -p rpm)" ] && rpm -e wireguard-tools 2>/dev/null
     systemctl restart systemd-resolved >/dev/null 2>&1; sleep 3
-    cancel_account /etc/wireguard/warp-account.conf
+    warp_api "cancel" "/etc/wireguard/warp-account.conf" >/dev/null 2>&1
     rm -rf /usr/bin/wireguard-go /usr/bin/warp /etc/dnsmasq.d/warp.conf /usr/bin/wireproxy /etc/local.d/warp.start
     [ -e /etc/gai.conf ] && sed -i '/^precedence \:\:ffff\:0\:0/d;/^label 2002\:\:\/16/d' /etc/gai.conf
     [ -e /usr/bin/tun.sh ] && rm -f /usr/bin/tun.sh
@@ -1107,7 +1173,7 @@ uninstall() {
       systemctl disable --now wireproxy
     fi
 
-    cancel_account /etc/wireguard/warp-account.conf
+    warp_api "cancel" "/etc/wireguard/warp-account.conf" >/dev/null 2>&1
     rm -rf /usr/bin/wireguard-go /usr/bin/warp /etc/dnsmasq.d/warp.conf /usr/bin/wireproxy /lib/systemd/system/wireproxy.service
     [ -e /etc/gai.conf ] && sed -i '/^precedence \:\:ffff\:0\:0/d;/^label 2002\:\:\/16/d' /etc/gai.conf
     [ -e /usr/bin/tun.sh ] && rm -f /usr/bin/tun.sh && sed -i '/tun.sh/d' /etc/crontab
@@ -1588,12 +1654,12 @@ input_url_token() {
       [ -n "$ADDRESS6" ] && PRIVATEKEY=$(expr "$TEAMS_CONTENT" : '.*private_key&quot;>\([^<]*\).*')
       [[ -n "$ADDRESS6" && -z "$PRIVATEKEY" ]] && PRIVATEKEY=$(expr "$TEAMS_CONTENT" : '.*private_key">\([^<]\+\).*')
       RESERVED=$(expr "$TEAMS_CONTENT" : '.*;client_id&quot;:&quot;\([^&]\{4\}\)')
-      CLIENT_ID=$(reserved_and_clientid "$RESERVED" decode)
+      CLIENT_ID="$(warp_api "convert" "" "" "" "" "$RESERVED" "decode")"
     else
       ADDRESS6=$(expr "$TEAMS_CONTENT" : '.*"v6":[ ]*"\([^["]\+\).*')
       PRIVATEKEY=$(expr "$TEAMS_CONTENT" : '.*"private_key":[ ]*"\([^"]\+\).*')
       RESERVED=$(expr "$TEAMS_CONTENT" : '.*"client_id":[ ]*"\([^"]\+\).*')
-      CLIENT_ID=$(reserved_and_clientid "$RESERVED" decode)
+      CLIENT_ID="$(warp_api "convert" "" "" "" "" "$RESERVED" "decode")"
     fi
 
   elif [ "$1" = 'token' ]; then
@@ -1613,11 +1679,11 @@ input_url_token() {
       [ -z "$TEAM_TOKEN" ] && return
 
       unset TEAMS ADDRESS6 PRIVATEKEY CLIENT_ID
-      TEAMS=$(bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh | sed 's# > $register_path##; /cat $register_path/d') --register --token $TEAM_TOKEN)
+      TEAMS=$(warp_api "register" "" "" "" "$TEAM_TOKEN" 2>&1)
       ADDRESS6=$(expr "$TEAMS" : '.*"v6":[ ]*"\([^"]*\).*')
       PRIVATEKEY=$(expr "$TEAMS" : '.*"private_key":[ ]*"\([^"]*\).*')
       RESERVED=$(expr "$TEAMS" : '.*"client_id":[ ]*"\([^"]*\).*')
-      CLIENT_ID=$(reserved_and_clientid "$RESERVED" decode)
+      CLIENT_ID="$(warp_api "convert" "" "" "" "" "$RESERVED" "decode")"
     done
 
   elif [ "$1" = 'input' ]; then
@@ -1627,10 +1693,10 @@ input_url_token() {
     [[ -n "$PRIVATEKEY" && -n "$ADDRESS6" ]] && reading " Reserved or client_id: " RESERVED_OR_CLIENT_ID || return
     if [[ "$RESERVED_OR_CLIENT_ID" =~ ^[a-zA-Z+/]{4}$ ]]; then
       RESERVED=$RESERVED_OR_CLIENT_ID
-      CLIENT_ID=$(reserved_and_clientid "$RESERVED" decode)
+      CLIENT_ID="$(warp_api "convert" "" "" "" "" "$RESERVED" "decode")"
     elif [[ "$RESERVED_OR_CLIENT_ID" =~ ([0-9]{1,3}){3} ]]; then
-      RESERVED=$(reserved_and_clientid "$RESERVED_OR_CLIENT_ID" encode)
-      CLIENT_ID=$(reserved_and_clientid "$RESERVED" decode)
+      RESERVED=$(warp_api "convert" "" "" "" "" "$RESERVED_OR_CLIENT_ID" "encode")
+      CLIENT_ID="$(warp_api "convert" "" "" "" "" "$RESERVED" "decode")"
     fi
 
   elif [ "$1" = 'share' ]; then
@@ -1746,6 +1812,7 @@ server=/gstatic.com/8.8.8.8
 # > Custom ChatGPT
 ipset=/openai.com/warp
 ipset=/ai.com/warp
+ipset=/chatgpt.com/warp
 
 # > IP api
 ipset=/ip.sb/warp
@@ -1881,21 +1948,6 @@ best_endpoint() {
   [ ! -e /tmp/noudp ] && echo "$ENDPOINT" > /tmp/best_endpoint
 }
 
-# Reserved 与 Client id 互换
-reserved_and_clientid() {
-  if [ "$2" = decode ]; then
-    echo "$1" | base64 -d | xxd -p | fold -w2 | while read HEX; do printf '%d ' "0x${HEX}"; done | awk '{print "["$1", "$2", "$3"]"}'
-  elif [ "$2" = encode ]; then
-    BYTE[0]=$(grep -oE '[0-9]+' <<< "$1" | head -n 1)
-    BYTE[1]=$(grep -oE '[0-9]+' <<< "$1" | sed -n '2p')
-    BYTE[2]=$(grep -oE '[0-9]+' <<< "$1" | tail -n 1)
-    echo "$RESERVED" | printf '%02x' ${BYTE[0]} ${BYTE[1]} ${BYTE[2]} | xxd -r -p | base64
-  elif [ "$2" = file ]; then
-    local FILE_PATH=$1
-    grep 'client_id' $FILE_PATH | cut -d\" -f4 | base64 -d | xxd -p | fold -w2 | while read HEX; do printf '%d ' "0x${HEX}"; done | awk '{print "["$1", "$2", "$3"]"}'
-  fi
-}
-
 # WARP 或 WireProxy 安装
 install() {
   # 后台优选最佳 MTU
@@ -1994,13 +2046,13 @@ install() {
 
     # 注册 WARP 账户 ( warp-account.conf 使用默认值加快速度)。如有 WARP+ 账户，修改 license 并升级，并把设备名等信息保存到 /etc/wireguard/info.log
     mkdir -p /etc/wireguard/ >/dev/null 2>&1
-    bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh | sed 's#cat $register_path; ##') --register --file /etc/wireguard/warp-account.conf 2>/dev/null
+    warp_api "register" > /etc/wireguard/warp-account.conf "$LICENSE" 2>/dev/null
 
     # 有 License 来升级账户
     if [ -n "$LICENSE" ]; then
-      local UPDATE_RESULT=$(bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /etc/wireguard/warp-account.conf --license $LICENSE)
+      local UPDATE_RESULT=$(warp_api "license" "/etc/wireguard/warp-account.conf" "$LICENSE")
       if grep -q '"warp_plus": true' <<< "$UPDATE_RESULT"; then
-        [ -n "$NAME" ] && bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /etc/wireguard/warp-account.conf --name $NAME >/dev/null 2>&1
+        [ -n "$NAME" ] && warp_api "name" "/etc/wireguard/warp-account.conf" "" "$NAME" >/dev/null 2>&1
         sed -i "s#\([ ]\+\"license\": \"\).*#\1$LICENSE\"#g; s#\"account_type\".*#\"account_type\": \"limited\",#g; s#\([ ]\+\"name\": \"\).*#\1$NAME\"#g" /etc/wireguard/warp-account.conf
         echo "$LICENSE" > /etc/wireguard/license
         echo -e "Device name   : $NAME" > /etc/wireguard/info.log
@@ -2022,7 +2074,7 @@ Address = 172.16.0.2/32
 Address = $(grep '"v6.*"$' /etc/wireguard/warp-account.conf | cut -d\" -f4)/128
 DNS = 8.8.8.8
 MTU = 1280
-#Reserved = $(reserved_and_clientid /etc/wireguard/warp-account.conf file)
+#Reserved = $(warp_api "convert" "/etc/wireguard/warp-account.conf" "" "" "" "" "file")
 #Table = off
 #PostUp = /etc/wireguard/NonGlobalUp.sh
 #PostDown = /etc/wireguard/NonGlobalDown.sh
@@ -2288,7 +2340,7 @@ EOF
     # 如成功升级 Teams ，根据新账户信息修改配置文件并注销旧账户; 如失败则还原为原账户
     wireproxy_onoff no_output
     if [[ "$WIREPROXY_TRACE4$WIREPROXY_TRACE6" =~ on|plus ]]; then
-      cancel_account /etc/wireguard/warp-account.conf.bak
+      warp_api "cancel" "/etc/wireguard/warp-account.conf.bak" >/dev/null 2>&1
       backup_restore_delete delete
     else
       ACCOUNT_CHANGE_FAILED='Teams' && warning "\n $(text 187) \n"
@@ -2333,7 +2385,7 @@ EOF
 
     # 如成功升级 Teams ，根据新账户信息修改配置文件并注销旧账户; 如失败则还原为原账户
     if [[ "$TRACE4$TRACE6" =~ on|plus ]]; then
-      cancel_account /etc/wireguard/warp-account.conf.bak
+      warp_api "cancel" "/etc/wireguard/warp-account.conf.bak" >/dev/null 2>&1
       backup_restore_delete delete
     else
       ACCOUNT_CHANGE_FAILED='Teams' && warning "\n $(text 187) \n"
@@ -2541,7 +2593,7 @@ check_quota() {
   if [ "$CHECK_TYPE" = 'client' ]; then
     QUOTA=$(warp-cli --accept-tos registration show 2>/dev/null | awk -F' ' '/Quota/{print $NF}')
   elif [ -e /etc/wireguard/warp-account.conf ]; then
-    QUOTA=$(bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /etc/wireguard/warp-account.conf --device | awk '/quota/{print $NF}' | sed "s#,##")
+    QUOTA=$(warp_api "device" "/etc/wireguard/warp-account.conf" | awk '/quota/{print $NF}' | sed "s#,##")
   fi
 
   # 部分系统没有依赖 bc，所以两个小数不能用 $(echo "scale=2; $QUOTA/1000000000000000" | bc)，改为从右往左数字符数的方法
@@ -2661,16 +2713,16 @@ change_to_free() {
     esac
 
     # 流程3:注册新账户
-    bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh | sed 's#cat $register_path; ##') --register --file /etc/wireguard/warp-account.conf 2>/dev/null
+    warp_api "register" > /etc/wireguard/warp-account.conf 2>/dev/null
 
     # 流程4:如成功，根据新账户信息修改配置文件并注销旧账户; 如失败则还原为原账户
     # 如升级成功的处理: 删除原账户信息文件，注销原账户
     if grep -q 'warp_plus' /etc/wireguard/warp-account.conf; then
-      cancel_account /etc/wireguard/warp-account.conf.bak
+      warp_api "cancel" "/etc/wireguard/warp-account.conf.bak" >/dev/null 2>&1
       backup_restore_delete delete
       local PRIVATEKEY="$(grep 'private_key' /etc/wireguard/warp-account.conf | cut -d\" -f4)"
       local ADDRESS6="$(grep '"v6.*"$' /etc/wireguard/warp-account.conf | cut -d\" -f4)"
-      local CLIENT_ID="$(reserved_and_clientid /etc/wireguard/warp-account.conf file)"
+      local CLIENT_ID="$(warp_api "convert" "/etc/wireguard/warp-account.conf" "" "" "" "" "file")"
       sed -i "s#\(PrivateKey[ ]\+=[ ]\+\).*#\1$PRIVATEKEY#g; s#\(Address[ ]\+=[ ]\+\).*\(/128$\)#\1$ADDRESS6\2#g; s#\(.*Reserved[ ]\+=[ ]\+\).*#\1$CLIENT_ID#g" /etc/wireguard/warp.conf
       [ "$UPDATE_ACCOUNT" = 'wireproxy' ] && sed -i "s#\(PrivateKey[ ]\+=[ ]\+\).*#\1$PRIVATEKEY#g; s#\(Address[ ]\+=[ ]\+\).*\(/128$\)#\1$ADDRESS6\2#g" /etc/wireguard/proxy.conf
       TYPE=' Free' && [ -e /etc/wireguard/info.log ] && TYPE=' Teams' && grep -q 'Device name' /etc/wireguard/info.log && TYPE='+'
@@ -2776,20 +2828,20 @@ change_to_plus() {
     esac
 
     # 流程3:注册新账户
-    bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh | sed 's#cat $register_path; ##') --register --file /etc/wireguard/warp-account.conf 2>/dev/null
+    warp_api "register" > /etc/wireguard/warp-account.conf 2>/dev/null
 
     # 流程4:使用 License 升级账户
-    local UPDATE_RESULT=$(bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /etc/wireguard/warp-account.conf --license $LICENSE)
+    local UPDATE_RESULT=$(warp_api "license" "/etc/wireguard/warp-account.conf" "$LICENSE")
 
     # 流程5:如成功，根据新账户信息修改配置文件并注销旧账户; 如失败则还原为原账户
     # 如升级成功的处理: 删除原账户信息文件，注销原账户
     if grep -q '"warp_plus": true' <<< "$UPDATE_RESULT"; then
-      [ -n "$NAME" ] && bash <(curl -m5 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /etc/wireguard/warp-account.conf --name $NAME >/dev/null 2>&1
-      cancel_account /etc/wireguard/warp-account.conf.bak
+      [ -n "$NAME" ] && warp_api "name" "/etc/wireguard/warp-account.conf" "" "$NAME" >/dev/null 2>&1
+      warp_api "cancel" "/etc/wireguard/warp-account.conf.bak" >/dev/null 2>&1
       backup_restore_delete delete
       local PRIVATEKEY="$(grep 'private_key' /etc/wireguard/warp-account.conf | cut -d\" -f4)"
       local ADDRESS6="$(grep '"v6.*"$' /etc/wireguard/warp-account.conf | cut -d\" -f4)"
-      local CLIENT_ID="$(reserved_and_clientid /etc/wireguard/warp-account.conf file)"
+      local CLIENT_ID="$(warp_api "convert" "/etc/wireguard/warp-account.conf" "" "" "" "" "file")"
       sed -i "s#\(PrivateKey[ ]\+=[ ]\+\).*#\1$PRIVATEKEY#g; s#\(Address[ ]\+=[ ]\+\).*\(/128$\)#\1$ADDRESS6\2#g; s#\(.*Reserved[ ]\+=[ ]\+\).*#\1$CLIENT_ID#g" /etc/wireguard/warp.conf
       [ "$UPDATE_ACCOUNT" = 'wireproxy' ] && sed -i "s#\(PrivateKey[ ]\+=[ ]\+\).*#\1$PRIVATEKEY#g; s#\(Address[ ]\+=[ ]\+\).*\(/128$\)#\1$ADDRESS6\2#g" /etc/wireguard/proxy.conf
       sed -i "s#\([ ]\+\"license\": \"\).*#\1$LICENSE\"#g; s#\"account_type\".*#\"account_type\": \"limited\",#g; s#\([ ]\+\"name\": \"\).*#\1$NAME\"#g" /etc/wireguard/warp-account.conf
@@ -2888,7 +2940,7 @@ change_to_teams() {
     warp )
       net
       if [[ "$TRACE4$TRACE6" =~ on|plus ]]; then
-        cancel_account /etc/wireguard/warp-account.conf.bak
+        warp_api "cancel" "/etc/wireguard/warp-account.conf.bak" >/dev/null 2>&1
         backup_restore_delete delete
         TYPE=' Free' && [ -e /etc/wireguard/info.log ] && TYPE=' Teams' && grep -q 'Device name' /etc/wireguard/info.log && TYPE='+'
         info "\n $(text 62) \n"
@@ -2902,7 +2954,7 @@ change_to_teams() {
     wireproxy )
       wireproxy_onoff
       if [[ "$WIREPROXY_TRACE4$WIREPROXY_TRACE6" =~ on|plus ]]; then
-        cancel_account /etc/wireguard/warp-account.conf.bak
+        warp_api "cancel" "/etc/wireguard/warp-account.conf.bak" >/dev/null 2>&1
         backup_restore_delete delete
         TYPE=' Free' && [ -e /etc/wireguard/info.log ] && TYPE=' Teams' && grep -q 'Device name' /etc/wireguard/info.log && TYPE='+'
         info "\n $(text 62) \n"

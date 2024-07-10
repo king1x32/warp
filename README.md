@@ -9,7 +9,7 @@
 - [WARP好处](README.md#WARP好处)
 - [warp 运行脚本](README.md#warp-运行脚本)
 - [warp-go 运行脚本](README.md#warp-go-运行脚本)
-- [Cloudflare api 运行脚本](README.md#cloudflare-api-运行脚本)
+- [Cloudflare api](README.md#cloudflare-api)
 - [通过 warp 解锁 chatGPT 的方法](README.md#通过-warp-解锁-chatgpt-的方法)
 - [刷 Netflix 解锁 WARP IP 的方法](README.md#刷-Netflix-解锁-WARP-IP-的方法)
 - [指定网站分流到 "socks5" 的 xray 配置模板 (适用于 WARP Client Proxy 和 WireProxy)](README.md#指定网站分流到-socks5-的-xray-配置模板-适用于-warp-client-proxy-和-wireproxy)
@@ -23,20 +23,22 @@
 * * *
 
 ## 更新信息
+2024.7.8 menu.sh v3.0.10 / warp-go.sh v1.1.9 1. Publish warp api, you can register account, join Zero Trust, check account information and all other operations. Detailed instructions: https://warp.cloudflare.now.cc/ ; 2. Scripts to update the warp api; 1. 发布 warp api，可以注册账户，加入 Zero Trust，查账户信息等所有的操作。详细使用说明: https://warp.cloudflare.now.cc/; 2. 脚本更新 warp api
+
 2024.6.30 menu.sh v3.0.9 1. By multithreading, parallel processing of optimal MTU, optimal endpoint, downloading wireguard-go and installing dependencies, the script runtime is reduced by more than half; 2. Reverse proxy http://ip-api.com/json and https://hits.seeyoufarm.com with cloudflare worker for better dual-stack support and faster fetching; 3. DNS Priority: Cloudflare 1.1.1.1 > Google 8.8.8.8; 1. 通过多线程，并行处理最优 MTU，最优 endpoint，下载 wireguard-go 和安装依赖， 脚本运行时间缩短一半以上; 2. 用 Cloudflare worker 反向代理 http://ip-api.com/json 和 https://hits.seeyoufarm.com，以更好支持双栈及提升获取速度; 3. DNS 优先级: Cloudflare 1.1.1.1 > Google 8.8.8.8
-
-2024.6.28 menu.sh v3.0.8 The official WARP Linux Client supports arm64 systems and is available in both socks5 proxy and Warp interface modes; 官方 WARP Linux Client 支持 arm64 系统， Socks5 proxy 模式 和 Warp interface 模式均可用
-
-2024.6.2 menu.sh v3.0.7 Support CentOS 9 / Alma Linux 9 / Rocky Linux 9 system; 支持 CentOS 9 / Alma Linux 9 / Rocky Linux 9 系统
-
-2024.5.5 menu.sh v3.0.6 / warp-go.sh v1.1.8 Support Alpine edge system; 支持 Alpine edge 系统
-
-2024.5.1 menu.sh v3.0.5 Deal with apt library changes for Debian 10 installations of wireguard-tools; 处理 Debian 10 安装 wireguard-tools 的 apt 库变更的问题
 
 <details>
     <summary>历史更新 history（点击即可展开或收起）</summary>
 <br>
 
+>2024.6.28 menu.sh v3.0.8 The official WARP Linux Client supports arm64 systems and is available in both socks5 proxy and Warp interface modes; 官方 WARP Linux Client 支持 arm64 系统， Socks5 proxy 模式 和 Warp interface 模式均可用
+>
+>2024.6.2 menu.sh v3.0.7 Support CentOS 9 / Alma Linux 9 / Rocky Linux 9 system; 支持 CentOS 9 / Alma Linux 9 / Rocky Linux 9 系统
+>
+>2024.5.5 menu.sh v3.0.6 / warp-go.sh v1.1.8 Support Alpine edge system; 支持 Alpine edge 系统
+>
+>2024.5.1 menu.sh v3.0.5 Deal with apt library changes for Debian 10 installations of wireguard-tools; 处理 Debian 10 安装 wireguard-tools 的 apt 库变更的问题
+>
 >2024.4.14 menu.sh v3.0.4 1. Alpine check and update the wget version; 2. Add a message for feedback when connect warp fails; 1. Alpine 检测并更新 wget 版本的； 2. 获取 IP 失败时增加提示信息以便反馈
 >
 >2024.3.21 menu.sh v3.0.3 / warp-go.sh 1.1.7 1. Update some commands according to warp-cli; 2. Remove the github cdn; 1. 根据 warp-cli 官方更新部分命令； 2. 去掉 Github cdn
@@ -563,7 +565,25 @@ warp-go [option] [lisence]
   | 其他或空值| 菜单界面 |
 
 
-## Cloudflare api 运行脚本
+## Cloudflare api
+
+### Warp 使用指南，使用 `curl` 命令可以执行 Warp API 请求。
+
+| run 参数 | 作用描述 | 参数 | 示例 |
+|---|---|---|---|
+|  | 使用指南 | | `https://warp.cloudflare.now.cc/` |
+| `register` | 注册新设备 | `team_token（可选）`, `format（可选）` | `https://warp.cloudflare.now.cc/?run=register&team_token=<Your-Team-Token>&format=<json\|yaml\|wireguard>` |
+| `device` | 获取特定设备的详细信息 | `device_id`, `token` | `https://warp.cloudflare.now.cc/?run=device&device_id=<Your-Device-ID>&token=<Your-Token>` |
+| `app` | 获取客户端配置 | `token` | `https://warp.cloudflare.now.cc/?run=app&token=<Your-Token>` |
+| `bind` | 将设备绑定到帐户 | `device_id`, `token` | `https://warp.cloudflare.now.cc/?run=bind&device_id=<Your-Device-ID>&token=<Your-Token>` |
+| `name` | 设置设备名称 | `device_id`, `token`, `device_name` | `https://warp.cloudflare.now.cc/?run=name&device_id=<Your-Device-ID>&token=<Your-Token>&device_name=<Your-Device-Name>` |
+| `license` | 设置设备许可证 | `device_id`, `token`, `license` | `https://warp.cloudflare.now.cc/?run=license&device_id=<Your-Device-ID>&token=<Your-Token>&license=<Your-License>` |
+| `unbind` | 从帐户中取消绑定设备 | `device_id`, `token` | `https://warp.cloudflare.now.cc/?run=unbind&device_id=<Your-Device-ID>&token=<Your-Token>` |
+| `cancel` | 取消设备注册 | `device_id`, `token` | `https://warp.cloudflare.now.cc/?run=cancel&device_id=<Your-Device-ID>&token=<Your-Token>` |
+| `id` | Client ID 与 Reserved 转换 | `convert` | `https://warp.cloudflare.now.cc/?run=id&convert=<4-char-string\|Numbers1,Numbers2,Numbers3>` |
+| `sum` | 获取总计和 24 小时运行计数 |  | `https://warp.cloudflare.now.cc/?run=sum` |
+
+### 运行脚本
 ```
 wget -N https://gitlab.com/fscarmen/warp/-/raw/main/api.sh && bash api.sh [option]
 ```
@@ -664,6 +684,7 @@ https://github.com/acacia233/Project-WARP-Unlock
 * 所有的热心网友们
 
 服务提供（排名不分先后）:
+* fscarmen 的 Warp Api: https://warp.cloudflare.now.cc/
 * CloudFlare Warp(+): https://1.1.1.1/
 * WGCF 项目原作者: https://github.com/ViRb3/wgcf/
 * Coia 和 warp-go 团队: https://gitlab.com/ProjectWARP/warp-go
@@ -675,10 +696,8 @@ https://github.com/acacia233/Project-WARP-Unlock
 * luoxue-bot 的成熟作品:https://github.com/luoxue-bot/warp_auto_change_ip
 * lmc999 的成熟作品: https://github.com/lmc999/RegionRestrictionCheck
 * WireProxy 作者: https://github.com/pufferffish/wireproxy
-* 获取公网 IP 及归属地查询: https://ifconfig.co/  
-https://ip.gs/  
-https://ip.sb/
-* 统计PV网:https://hits.seeyoufarm.com/
+* 获取公网 IP 及归属地查询: https://ifconfig.co/ , https://ip.gs/ , https://ip.sb/ , https://ip-api.com
+* 统计PV网: https://hits.seeyoufarm.com/
 * Coia 的网页版提出 Teams Token: https://web--public--warp-team-api--coia-mfs4.code.run
 
 CloudFlare WARP 全球站点和服务状态:

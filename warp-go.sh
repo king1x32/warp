@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # 当前脚本版本号和新增功能
-VERSION='1.1.8'
+VERSION='1.1.9'
 
 # 判断 Teams token 最少字符数
 TOKEN_LENGTH=800
@@ -16,8 +16,8 @@ trap "rm -f /tmp/warp-go*; exit" INT
 
 E[0]="Language:\n  1.English (default) \n  2.简体中文"
 C[0]="${E[0]}"
-E[1]="Support Alpine edge system."
-C[1]="支持 Alpine edge 系统"
+E[1]="1. Publish warp api, you can register account, join Zero Trust, check account information and all other operations. Detailed instructions: https://warp.cloudflare.now.cc/ ; 2. Scripts to update the warp api."
+C[1]="1. 发布 warp api，可以注册账户，加入 Zero Trust，查账户信息等所有的操作。详细使用说明: https://warp.cloudflare.now.cc/; 2. 脚本更新 warp api"
 E[2]="warp-go h (help)\n warp-go o (temporary warp-go switch)\n warp-go u (uninstall WARP web interface and warp-go)\n warp-go v (sync script to latest version)\n warp-go i (replace IP with Netflix support)\n warp-go 4/6 ( WARP IPv4/IPv6 single-stack)\n warp-go d (WARP dual-stack)\n warp-go n (WARP IPv4 non-global)\n warp-go g (WARP global/non-global switching)\n warp-go e (output wireguard and sing-box configuration file)\n warp-go a (Change to Free, WARP+ or Teams account)"
 C[2]="warp-go h (帮助）\n warp-go o (临时 warp-go 开关)\n warp-go u (卸载 WARP 网络接口和 warp-go)\n warp-go v (同步脚本至最新版本)\n warp-go i (更换支持 Netflix 的IP)\n warp-go 4/6 (WARP IPv4/IPv6 单栈)\n warp-go d (WARP 双栈)\n warp-go n (WARP IPv4 非全局)\n warp-go g (WARP 全局 / 非全局相互切换)\n warp-go e (输出 wireguard 和 sing-box 配置文件)\n warp-go a (更换到 Free，WARP+ 或 Teams 账户)"
 E[3]="This project is designed to add WARP network interface for VPS, using warp-go core, using various interfaces of CloudFlare-WARP, integrated wireguard-go, can completely replace WGCF. Save Hong Kong, Toronto and other VPS, can also get WARP IP. Thanks again @CoiaPrant and his team. Project address: https://gitlab.com/ProjectWARP/warp-go/-/tree/master/"
@@ -369,13 +369,13 @@ check_arch() {
 check_dependencies() {
   # 对于 Alpine 和 OpenWrt 系统，升级库并重新安装依赖
   if [[ "$SYSTEM" =~ Alpine|OpenWrt ]]; then
-    DEPS_CHECK=("ping" "curl" "wget" "grep" "bash" "xxd" "ip" "python3" "tar" "virt-what")
-    DEPS_INSTALL=("iputils-ping" "curl" "wget" "grep" "bash" "xxd" "iproute2" "python3" "tar" "virt-what")
+    DEPS_CHECK=("ping" "curl" "wget" "grep" "bash" "ip" "python3" "tar" "virt-what")
+    DEPS_INSTALL=("iputils-ping" "curl" "wget" "grep" "bash" "iproute2" "python3" "tar" "virt-what")
   else
-    # 对于 CentOS 系统，xxd 需要依赖 vim-common
+    # 对于三大系统需要的依赖
     [ "${SYSTEM}" = 'CentOS' ] && ${PACKAGE_INSTALL[int]} vim-common
-    DEPS_CHECK=("ping" "xxd" "wget" "curl" "systemctl" "ip" "python3")
-    DEPS_INSTALL=("iputils-ping" "xxd" "wget" "curl" "systemctl" "iproute2" "python3")
+    DEPS_CHECK=("ping" "wget" "curl" "systemctl" "ip" "python3")
+    DEPS_INSTALL=("iputils-ping" "wget" "curl" "systemctl" "iproute2" "python3")
   fi
 
   for c in "${!DEPS_CHECK[@]}"; do
@@ -389,6 +389,81 @@ check_dependencies() {
   fi
 
   PING6='ping -6' && [ $(type -p ping6) ] && PING6='ping6'
+}
+
+# 获取 warp 账户信息
+warp_api(){
+  local RUN=$1
+  local FILE_PATH=$2
+  local WARP_LICENSE=$3
+  local WARP_DEVICE_NAME=$4
+  local WARP_TEAM_TOKEN=$5
+  local WARP_CONVERT=$6
+  local WARP_CONVERT_MODE=$7
+  local WARP_API_URL="warp.cloudflare.now.cc"
+
+  if [ -s "$FILE_PATH" ]; then
+    # Teams 账户文件
+    if grep -q 'xml version' $FILE_PATH; then
+      local WARP_DEVICE_ID=$(grep 'correlation_id' $FILE_PATH | sed "s#.*>\(.*\)<.*#\1#")
+      local WARP_TOKEN=$(grep 'warp_token' $FILE_PATH | sed "s#.*>\(.*\)<.*#\1#")
+      local WARP_CLIENT_ID=$(grep 'client_id' $FILE_PATH | sed "s#.*client_id&quot;:&quot;\([^&]\{4\}\)&.*#\1#")
+
+    # 官方 api 文件
+    elif grep -q 'client_id' $FILE_PATH; then
+      local WARP_DEVICE_ID=$(grep -m1 '"id' "$FILE_PATH" | cut -d\" -f4)
+      local WARP_TOKEN=$(grep '"token' "$FILE_PATH" | cut -d\" -f4)
+      local WARP_CLIENT_ID=$(grep 'client_id' "$FILE_PATH" | cut -d\" -f4)
+
+    # client 文件，默认存放路径为 /var/lib/cloudflare-warp/reg.json
+    elif grep -q 'registration_id' $FILE_PATH; then
+      local WARP_DEVICE_ID=$(cut -d\" -f4 "$FILE_PATH")
+      local WARP_TOKEN=$(cut -d\" -f8 "$FILE_PATH")
+
+    # wgcf 文件，默认存放路径为 /etc/wireguard/wgcf-account.toml
+    elif grep -q 'access_token' $FILE_PATH; then
+      id=$(grep 'device_id' "$FILE_PATH" | cut -d\' -f2)
+      token=$(grep 'access_token' "$FILE_PATH" | cut -d\' -f2)
+
+    # warp-go 文件，默认存放路径为 /opt/warp-go/warp.conf
+    elif grep -q 'PrivateKey' $FILE_PATH; then
+      id=$(awk -F' *= *' '/^Device/{print $2}' "$FILE_PATH")
+      token=$(awk -F' *= *' '/^Token/{print $2}' "$FILE_PATH")
+    fi
+  fi
+
+  case "$RUN" in
+    register )
+      curl -m5 -sL "https://${WARP_API_URL}/?run=register&team_token=${WARP_TEAM_TOKE}"
+      ;;
+    device )
+      curl -m5 -sL "https://${WARP_API_URL}/?run=device&device_id=${WARP_DEVICE_ID}&token=${WARP_TOKEN}"
+      ;;
+    name )
+      curl -m5 -sL "https://${WARP_API_URL}/?run=name&device_id=${WARP_DEVICE_ID}&token=${WARP_TOKEN}&device_name=${WARP_DEVICE_NAME}"
+      ;;
+    license )
+      curl -m5 -sL "https://${WARP_API_URL}/?run=license&device_id=${WARP_DEVICE_ID}&token=${WARP_TOKEN}&license=${WARP_LICENSE}"
+      ;;
+    cancel )
+      # 只保留Teams账户，删除其他账户
+      grep -oqE '"id":[ ]+"t.[A-F0-9a-f]{8}-' $FILE_PATH || curl -m5 -sL "https://${WARP_API_URL}/?run=cancel&device_id=${WARP_DEVICE_ID}&token=${WARP_TOKEN}"
+      ;;
+    convert )
+      if [ "$WARP_CONVERT_MODE" = decode ]; then
+        curl -m5 -sL "https://${WARP_API_URL}/?run=id&convert=${WARP_CONVERT}" | grep -A4 'reserved' | sed 's/.*\(\[.*\)/\1/g; s/],/]/' | tr -d '[:space:]'
+      elif [ "$WARP_CONVERT_MODE" = encode ]; then
+        curl -m5 -sL "https://${WARP_API_URL}/?run=id&convert=${WARP_CONVERT//[ \[\]]}" | awk -F '"' '/client_id/{print $(NF-1)}'
+      elif [ "$WARP_CONVERT_MODE" = file ]; then
+        if grep -sq '"reserved"' $FILE_PATH; then
+          grep -A4 'reserved' $FILE_PATH | sed 's/.*\(\[.*\)/\1/g; s/],/]/' | tr -d '[:space:]'
+        else
+          local WARP_CONVERT=$(awk -F '"' '/"client_id"/{print $(NF-1)}' $FILE_PATH)
+          curl -m5 -sL "https://${WARP_API_URL}/?run=id&convert=${WARP_CONVERT}" | grep -A4 'reserved' | sed 's/.*\(\[.*\)/\1/g; s/],/]/' | tr -d '[:space:]'
+        fi
+      fi
+      ;;
+  esac
 }
 
 # 检测 warp-go 的安装状态。STATUS: 0-未安装; 1-已安装未启动; 2-已安装启动中; 3-脚本安装中
@@ -510,7 +585,7 @@ change_ip() {
     sed -i '1,6!d' /opt/warp-go/warp.conf.tmp2
     tail -n +7 /opt/warp-go/warp.conf.tmp1 >> /opt/warp-go/warp.conf.tmp2
     mv /opt/warp-go/warp.conf.tmp2 /opt/warp-go/warp.conf
-    bash <(curl -m8 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /opt/warp-go/warp.conf.tmp1 --cancle >/dev/null 2>&1
+    warp_api "cancel" "/opt/warp-go/warp.conf.tmp1" >/dev/null 2>&1
     rm -f /opt/warp-go/warp.conf.tmp*
     ${SYSTEMCTL_RESTART[int]}
     sleep $l
@@ -608,7 +683,7 @@ uninstall() {
   # 卸载
   systemctl disable --now warp-go >/dev/null 2>&1
   kill -15 $(pgrep warp-go) >/dev/null 2>&1
-  bash <(curl -m8 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /opt/warp-go/warp.conf --cancle >/dev/null 2>&1
+  warp_api "cancel" "/opt/warp-go/warp.conf" >/dev/null 2>&1
   rm -rf /opt/warp-go /lib/systemd/system/warp-go.service /usr/bin/warp-go /tmp/warp-go*
   [ -s /opt/warp-go/tun.sh ] && rm -f /opt/warp-go/tun.sh && sed -i '/tun.sh/d' /etc/crontab
 
@@ -679,7 +754,7 @@ register_api() {
     if ! grep -sq 'PrivateKey' /opt/warp-go/$REGISTER_FILE; then
       unset CF_API_REGISTER API_DEVICE_ID API_ACCESS_TOKEN API_PRIVATEKEY API_TYPE
       rm -f /opt/warp-go/$REGISTER_FILE
-      CF_API_REGISTER="$(bash <(curl -m8 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh | sed 's# > $register_path##g; /cat $register_path/d') --register --token $TOKEN 2>/dev/null)"
+      CF_API_REGISTER="$(warp_api "register" "" "" "" "$TOKEN" 2>/dev/null)"
       [[ -n "$NF" && -n "$EXPECT" && -s /opt/warp-go/License ]] && LICENSE=$(cat /opt/warp-go/License) && NAME=$(cat /opt/warp-go/Device_Name)
       [[ -z "$LICENSE" && -s /opt/warp-go/License ]] && rm -f /opt/warp-go/License /opt/warp-go/Device_Name
       if grep -q 'private_key' <<< "$CF_API_REGISTER"; then
@@ -713,9 +788,9 @@ EOF
     if grep -sq 'Account' /opt/warp-go/$REGISTER_FILE; then
       echo -e "\n[Script]\nPostUp =\nPostDown =" >> /opt/warp-go/$REGISTER_FILE && sed -i 's/\r//' /opt/warp-go/$REGISTER_FILE
       if [ -n "$LICENSE" ]; then
-        local RESULT=$(bash <(curl -m8 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /opt/warp-go/$REGISTER_FILE --license $LICENSE)
+        local RESULT=$(warp_api "license" "/opt/warp-go/$REGISTER_FILE" "$LICENSE" >/dev/null 2>&1)
         if [[ "$RESULT" =~ '"warp_plus": true' ]]; then
-          bash <(curl -m8 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /opt/warp-go/$REGISTER_FILE --name $NAME >/dev/null 2>&1
+          warp_api "name" "/opt/warp-go/$REGISTER_FILE" "" "$NAME" >/dev/null 2>&1
           echo "$LICENSE" > /opt/warp-go/License
           echo "$NAME" > /opt/warp-go/Device_Name
           sed -i "s/Type =.*/Type = plus/g" /opt/warp-go/$REGISTER_FILE
@@ -725,8 +800,8 @@ EOF
         fi
       elif [[ -s /opt/warp-go/License && -s /opt/warp-go/Device_Name ]]; then
         if [ -s /opt/warp-go/warp.conf.tmp ]; then
-          bash <(curl -m8 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /opt/warp-go/$REGISTER_FILE --license $(cat /opt/warp-go/License 2>/dev/null) >/dev/null 2>&1
-          bash <(curl -m8 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /opt/warp-go/$REGISTER_FILE --name $(cat /opt/warp-go/Device_Name 2>/dev/null) >/dev/null 2>&1
+          [ -s /opt/warp-go/License ] && warp_api "license" "/opt/warp-go/$REGISTER_FILE" "$(cat /opt/warp-go/License)" >/dev/null 2>&1
+          [ -s /opt/warp-go/Device_Name ] && warp_api "name" "/opt/warp-go/$REGISTER_FILE" "" "$(cat /opt/warp-go/Device_Name)" >/dev/null 2>&1
         fi
       fi
     else
@@ -1022,7 +1097,7 @@ update() {
           update_license
       esac
       cp -f /opt/warp-go/warp.conf{,.tmp1}
-      bash <(curl -m8 -sSL https://gitlab.com/fscarmen/warp/-/raw/main/api.sh) --file /opt/warp-go/warp.conf --cancle >/dev/null 2>&1
+      warp_api "cancel" "/opt/warp-go/warp.conf" >/dev/null 2>&1
       [ -s /opt/warp-go/warp.conf ] && rm -f /opt/warp-go/warp.conf
       register_api warp.conf 58 59
       head -n +6 /opt/warp-go/warp.conf > /opt/warp-go/warp.conf.tmp2

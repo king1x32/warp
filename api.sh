@@ -66,7 +66,7 @@ register_account() {
     private_key=$(wg genkey)
     public_key=$(wg pubkey <<< "$private_key")
   else
-    wg_api=$(curl -sSL https://fscarmen.cloudflare.now.cc/wg)
+    wg_api=$(curl -m5 -sSL https://wg-key.forvps.gq/)
     private_key=$(awk 'NR==2 {print $2}' <<< "$wg_api")
     public_key=$(awk 'NR==1 {print $2}' <<< "$wg_api")
   fi
@@ -91,7 +91,10 @@ register_account() {
       --data '{"key":"'${public_key}'","install_id":"'${install_id}'","fcm_token":"'${fcm_token}'","tos":"'$(date +"%Y-%m-%dT%H:%M:%S.000Z")'","model":"PC","serial_number":"'${install_id}'","locale":"zh_CN"}')
     done
 
-    account=$(python3 -m json.tool <<< "$account" 2>&1 | sed "/\"account_type\"/i\        \"private_key\": \"$private_key\",")
+    client_id=$(sed 's/.*"client_id":"\([^\"]\+\)\".*/\1/' <<< "$account")
+    reserved=$(echo "$client_id" | base64 -d | xxd -p | fold -w2 | while read HEX; do printf '%d ' "0x${HEX}"; done | awk '{print "["$1", "$2", "$3"]"}')
+  
+    account=$(python3 -m json.tool <<< "$account" 2>&1 | sed "/\"key\"/a\    \"private_key\": \"$private_key\","|  sed "/\"client_id\"/a\        \"reserved\": $reserved,")
     echo "$account" > $register_path 2>&1
   fi
   [[ ! -s $register_path || $(grep 'error' $register_path) ]] && { rm -f $register_path; exit 1; } || { cat $register_path; exit 0; }
